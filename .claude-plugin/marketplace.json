@@ -1,0 +1,11 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "anjsolution",
+  "description": "ANJSOLUTION 직원들이 Claude Code / Codex에서 사내 업무를 더 편하게 처리할 수 있도록 Ai-Ops 팀이 관리하는 플러그인 모음입니다. 터널 운영 조회, TTMS 구축 절차, 관련 사업 및 국가 과제 검색, 신규 입사자 안내처럼 반복되는 업무의 수행 방법을 Skill로 담고, 최신 사내 데이터는 인증된 MCP를 통해 안전하게 연결합니다.",
+  "owner": {
+    "name": "Ai-Ops",
+    "email": "khchoi@anjsol.co.kr",
+    "url": "https://github.com/anjsolution"
+  },
+  "plugins": []
+}

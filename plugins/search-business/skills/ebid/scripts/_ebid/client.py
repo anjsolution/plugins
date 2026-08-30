@@ -67,6 +67,10 @@ def format_ebid_date(value: date | datetime | str) -> str:
     text = str(value).strip().replace("-", "").replace("/", "").replace(".", "")
     if len(text) != 8 or not text.isdigit():
         raise ValueError(f"invalid ebid date: {value}")
+    try:
+        datetime.strptime(text, "%Y%m%d")  # 20251301 같은 달·일 범위 오류를 서버로 보내지 않는다
+    except ValueError as exc:
+        raise ValueError(f"invalid ebid date: {value}") from exc
     return text
 
 

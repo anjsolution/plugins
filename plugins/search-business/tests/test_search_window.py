@@ -5,6 +5,7 @@ from pathlib import Path
 SCRIPTS = Path(__file__).resolve().parents[1] / "skills/ebid/scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+from _ebid.client import format_ebid_date  # noqa: E402
 from _ebid.search import NOTICE_CLASS_LABELS, resolve_date_window  # noqa: E402
 
 
@@ -28,3 +29,18 @@ def test_no_project_paths_in_package():
         text = p.read_text(encoding="utf-8")
         for b in bad:
             assert b not in text, f"{p.name} contains {b!r}"
+
+
+def test_format_ebid_date_accepts_separators_and_rejects_bad_dates():
+    import pytest
+    assert format_ebid_date("2025-01-01") == "20250101"
+    for bad in ("abc", "20251301", "20250132"):
+        with pytest.raises(ValueError):
+            format_ebid_date(bad)
+
+
+def test_no_absolute_sibling_imports_anywhere():
+    import re
+    pat = re.compile(r"^\s*(from (client|search|raonk|contracts|attachments|normalize) import|import (client|raonk|search|contracts|attachments|normalize)\b)", re.M)
+    for p in (SCRIPTS / "_ebid").glob("*.py"):
+        assert not pat.search(p.read_text(encoding="utf-8")), p.name

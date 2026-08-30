@@ -246,7 +246,7 @@ def fetch_attachment(
     구성한다 — 이 다운로드가 실측된 화면(입찰결과 상세)과 동일한 값. 열린 공고(입찰공고
     상세)에서도 이 컨텍스트가 통하는지는 미검증 — ebid.md 참고.
     """
-    from client import RESULT_CLASS_MENU_CODES  # 지연 임포트 (순환 임포트 회피)
+    from .client import RESULT_CLASS_MENU_CODES  # 지연 임포트 (순환 임포트 회피)
 
     normalized_class = str(notice_class).strip().upper()
     menu_url_map = {

@@ -88,3 +88,9 @@ def test_notice_number_prechecked_before_network(tmp_path):
         r = run(script, "--notice", "abc", "--list", cwd=tmp_path) if script == "ebid_fetch.py" \
             else run(script, "--notice", "abc", cwd=tmp_path)
         assert r.returncode == 2 and "9자리" in r.stderr and r.stdout == "", script
+
+
+def test_search_help_mentions_out_and_html(tmp_path):
+    for script in ("ebid_search_common.py", "ebid_search_contract.py"):
+        h = run(script, "--help", cwd=tmp_path).stdout
+        assert "--out" in h and "--html" in h, script

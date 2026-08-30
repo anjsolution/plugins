@@ -173,3 +173,26 @@ def test_search_contracts_omits_cntr_nm_when_no_keyword(monkeypatch):
     sent.clear()
     contracts.search_contracts(None, keyword="터널", from_date="20260801", to_date="20260830", notice_class="SV")
     assert sent["cntr_nm"] == "터널" and sent["gubun"] == "SV"
+
+
+def test_render_html_notice_and_contract(tmp_path):
+    n = nz.normalize_notice({**ITEM, "noti_nm": "<긴급> A&B 용역"})
+    h = nz.render_notice_html([n], keyword="ITS", period_label="1년")
+    assert h.startswith("<title>'ITS' 공고 검색</title>")
+    assert "&lt;긴급&gt; A&amp;B 용역</a>" in h and "href=\"https://ebid.ex.co.kr/default.do?menuId=NPRO12001" in h
+    assert "<h2>[용역] 1건</h2>" in h and "[공사]" not in h
+    c = nz.normalize_contract(CONTRACT)
+    h2 = nz.render_contract_html([c], keyword="ITS", period_label="1년")
+    assert "<th>사업자번호</th>" in h2 and "114-81-64393" in h2 and "706,520,000" in h2
+    c["상세"] = nz.normalize_contract_detail(DETAIL)
+    h3 = nz.render_contract_html([c], keyword="ITS", period_label="1년", detail=True)
+    assert "<th>수의근거</th>" in h3 and "이영민(60 %), 홍성윤(40 %)" in h3
+
+
+def test_write_output_file_and_stdout(tmp_path, capsys):
+    out = tmp_path / "sub" / "r.md"
+    nz.write_output("hello\n", str(out))
+    cap = capsys.readouterr()
+    assert out.read_text(encoding="utf-8") == "hello\n" and cap.out == "" and "저장:" in cap.err
+    nz.write_output("x\n", None)
+    assert capsys.readouterr().out == "x\n"

@@ -37,7 +37,7 @@ from _ebid.errors import DATE_HINT, KoreanArgumentParser, describe_error, report
 from _ebid.contracts import (CONTRACT_PAGE_URL, DEFAULT_DETAIL_LIMIT, MAX_RETRIES,
                              fetch_contract_detail, search_contracts)
 from _ebid.normalize import (normalize_contract, normalize_contract_detail, print_table,
-                             render_contract_markdown)
+                             render_contract_html, render_contract_markdown, write_output)
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, resolve_date_window
 
@@ -57,6 +57,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--detail-limit", type=int, default=DEFAULT_DETAIL_LIMIT,
                         help=f"--detail 로 상세를 붙일 최대 건수 (기본 {DEFAULT_DETAIL_LIMIT}, 체결일 최신순)")
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 표로 출력")
+    parser.add_argument("--html", action="store_true", help="JSON 대신 HTML 표(브라우저·Artifact 용)")
+    parser.add_argument("--out", help="결과를 이 파일에 저장하고 stdout 에는 내지 않음 (형식은 --md/--html/JSON 그대로)")
     parser.add_argument("--md", action="store_true",
                         help="JSON 대신 대화창용 마크다운 표로 출력 (--detail 이면 상세 열 추가)")
     return parser.parse_args(argv)
@@ -128,14 +130,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[ebid] 상세 실패 {len(detail_failed)}건: "
                   + ", ".join(f"{no}[{kind}]" for no, kind in detail_failed), file=sys.stderr)
 
+    period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
     if args.md:
-        period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
-        print(render_contract_markdown(rows, keyword=args.keyword, period_label=period,
-                                       detail=args.detail), end="")
+        write_output(render_contract_markdown(rows, keyword=args.keyword, period_label=period,
+                                              detail=args.detail), args.out)
+    elif args.html:
+        write_output(render_contract_html(rows, keyword=args.keyword, period_label=period,
+                                          detail=args.detail), args.out)
     elif args.table:
         print_table(rows)
     else:
-        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        write_output(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", args.out)
     print(f"[ebid] keyword={args.keyword!r} types={args.types or '전체'} range={from_date}~{to_date} "
           f"count={len(rows)} detail={'on' if args.detail else 'off'} page={CONTRACT_PAGE_URL}",
           file=sys.stderr)

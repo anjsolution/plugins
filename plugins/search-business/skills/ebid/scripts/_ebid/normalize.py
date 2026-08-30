@@ -6,6 +6,7 @@ references/ebid-필드사전.md.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -260,3 +261,108 @@ def render_contract_markdown(rows: list[dict[str, Any]], *, keyword: str, period
                    f" | {_md_escape(d.get('수의근거')) or '-'} |")
     out.append("")
     return "\n".join(out).rstrip() + "\n"
+
+
+# ---------- HTML (Artifact·브라우저용) ----------
+import html as _html
+
+_HTML_STYLE = """<style>
+:root{--fg:#1a1a1a;--muted:#666;--line:#ddd;--head:#f3f4f6;--link:#0b57d0;--bg:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--fg:#e6e6e6;--muted:#9a9a9a;--line:#333;--head:#1f2937;--link:#8ab4f8;--bg:#111}}
+:root[data-theme="dark"]{--fg:#e6e6e6;--muted:#9a9a9a;--line:#333;--head:#1f2937;--link:#8ab4f8;--bg:#111}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,"Malgun Gothic",sans-serif;margin:0;padding:20px}
+h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px}
+p.meta{color:var(--muted);margin:0 0 14px;font-size:13px}
+.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+th{background:var(--head);position:sticky;top:0}td.num{text-align:right;white-space:nowrap}td.nw{white-space:nowrap}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+</style>"""
+
+
+def _esc(v: Any) -> str:
+    return _html.escape(str(v if v is not None else ""))
+
+
+def _html_doc(title: str, meta: str, sections: list[str]) -> str:
+    return (f"<title>{_esc(title)}</title>\n{_HTML_STYLE}\n<h1>{_esc(title)}</h1>\n"
+            f"<p class=\"meta\">{_esc(meta)}</p>\n" + "\n".join(sections) + "\n")
+
+
+def _html_table(headers: list[str], rows: list[list[str]], num_cols: set[int] = frozenset(),
+                nowrap_cols: set[int] = frozenset()) -> str:
+    head = "".join(f"<th>{_esc(h)}</th>" for h in headers)
+    body = []
+    for r in rows:
+        cells = []
+        for i, c in enumerate(r):
+            cls = " class=\"num\"" if i in num_cols else (" class=\"nw\"" if i in nowrap_cols else "")
+            cells.append(f"<td{cls}>{c}</td>")
+        body.append("<tr>" + "".join(cells) + "</tr>")
+    return f"<div class=\"wrap\"><table><thead><tr>{head}</tr></thead><tbody>{''.join(body)}</tbody></table></div>"
+
+
+def render_notice_html(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
+    """입찰공고 검색 결과 → 발주유형별 HTML 표(공고명 = 딥링크 <a>)."""
+    sections: list[str] = []
+    for label in ("공사", "용역", "물품"):
+        group = [r for r in rows if r.get("발주유형") == label]
+        if not group:
+            continue
+        body = []
+        for r in group:
+            name = _esc(r.get("공고명"))
+            link = f"<a href=\"{_esc(r['딥링크'])}\" target=\"_blank\" rel=\"noopener\">{name}</a>" if r.get("딥링크") else name
+            body.append([_esc(r.get("공고번호")), _esc(r.get("지역")), link, _esc(_amount(r.get("설계금액원"))),
+                         _esc(r.get("계약방법")), _esc(r.get("공고일")), _esc(r.get("상태"))])
+        sections.append(f"<h2>[{_esc(label)}] {len(group)}건</h2>" + _html_table(
+            ["공고번호", "지역", "공고명", "설계금액", "계약방법", "공고일", "상태"], body, num_cols={3}, nowrap_cols={0, 5}))
+    title = f"'{keyword}' 공고 검색" if keyword else "전체 공고"
+    meta = f"기간 {period_label} · 총 {len(rows)}건 · 공고명 클릭 = ebid 상세 (새 탭)"
+    if not sections:
+        sections.append("<p>검색 결과 없음</p>")
+    return _html_doc(title, meta, sections)
+
+
+def render_contract_html(rows: list[dict[str, Any]], *, keyword: str, period_label: str,
+                         detail: bool = False) -> str:
+    """계약공개현황 검색 결과 → 단일 HTML 표 (detail=True 면 상세 열 추가)."""
+    if detail:
+        headers = ["구분", "공고번호", "계약명", "계약방법", "계약업체", "대표자", "총계약금액", "예정가격", "체결일",
+                   "계약기간", "발주처", "담당자", "수의근거"]
+        num = {6, 7}
+    else:
+        headers = ["구분", "공고번호", "계약명", "계약방법", "사업자번호", "계약업체", "총계약금액", "체결일"]
+        num = {6}
+    body = []
+    for r in rows:
+        head = [_esc(r.get("발주유형")), _esc(r.get("연결공고번호") or "-"), _esc(r.get("계약명")), _esc(r.get("계약방법"))]
+        if not detail:
+            body.append(head + [_esc(_biz_no(r.get("사업자번호"))), _esc(r.get("업체명")),
+                                _esc(_amount(r.get("계약금액원"))), _esc(r.get("체결일"))])
+            continue
+        d = r.get("상세") or {}
+        reps = ", ".join(f"{v['대표자']}({v['지분율']})" if v.get("지분율") else v["대표자"]
+                         for v in d.get("계약업체상세") or [] if v.get("대표자"))
+        contact = d.get("담당자") or ""
+        if d.get("담당부서전화"):
+            contact = f"{contact} ({d['담당부서전화']})".strip()
+        body.append(head + [_esc(r.get("업체명")), _esc(reps or "-"), _esc(_amount(r.get("계약금액원"))),
+                            _esc(_amount(d.get("예정가격원"))), _esc(r.get("체결일")), _esc(d.get("계약기간") or "-"),
+                            _esc(d.get("발주처") or "-"), _esc(contact or "-"), _esc(d.get("수의근거") or "-")])
+    title = f"'{keyword}' 계약 검색" if keyword else "전체 계약"
+    meta = (f"기간 {period_label}(체결일) · 총 {len(rows)}건 · 건별 링크 없음 — 조회 화면: "
+            f"{BASE_URL}/default.do?menuId=NPRO20001")
+    section = _html_table(headers, body, num_cols=num, nowrap_cols={1, 8 if detail else 7}) if rows else "<p>검색 결과 없음</p>"
+    return _html_doc(title, meta, [section])
+
+
+def write_output(text: str, out_path: str | None) -> None:
+    """--out 이 있으면 파일에 쓰고 stdout 에는 아무것도 내지 않는다(대화 컨텍스트 절약). 없으면 stdout."""
+    if out_path:
+        p = Path(out_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+        print(f"[ebid] 저장: {p.resolve()}", file=sys.stderr)
+    else:
+        print(text, end="")

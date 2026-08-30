@@ -31,7 +31,8 @@ from typing import Any
 
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
-from _ebid.normalize import normalize_notice, print_table, render_notice_markdown
+from _ebid.normalize import (normalize_notice, print_table, render_notice_html,
+                             render_notice_markdown, write_output)
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
@@ -49,6 +50,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="발주유형 (기본: 공사 용역 물품 전부)",
     )
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 표로 출력")
+    parser.add_argument("--html", action="store_true", help="JSON 대신 HTML 표(브라우저·Artifact 용, 공고명 링크)")
+    parser.add_argument("--out", help="결과를 이 파일에 저장하고 stdout 에는 내지 않음 (형식은 --md/--html/JSON 그대로)")
     parser.add_argument("--md", action="store_true",
                         help="JSON 대신 대화창용 마크다운 표로 출력 (발주유형별 표 + 공고명 딥링크)")
     return parser.parse_args(argv)
@@ -101,13 +104,15 @@ def main(argv: list[str] | None = None) -> int:
         rows.extend(normalize_notice(it) for it in items or [])
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
+    period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
     if args.md:
-        period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
-        print(render_notice_markdown(rows, keyword=args.keyword, period_label=period), end="")
+        write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), args.out)
+    elif args.html:
+        write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), args.out)
     elif args.table:
         print_table(rows)
     else:
-        print(json.dumps(rows, ensure_ascii=False, indent=2))
+        write_output(json.dumps(rows, ensure_ascii=False, indent=2) + "\n", args.out)
     print(f"[ebid] keyword={args.keyword!r} types={args.types} "
           f"range={from_date}~{to_date} count={len(rows)}", file=sys.stderr)
     return 0

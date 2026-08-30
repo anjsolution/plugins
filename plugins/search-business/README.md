@@ -33,6 +33,14 @@ skills/ebid/
 └── references/              필드 사전 · 문서 판독 지침 · 소스 접근성
 ```
 
+## 문제가 생기면
+
+| 증상 | 원인·해결 |
+|---|---|
+| Codex 에서 `ProxyError … 127.0.0.1:9` 로 검색 실패, 웹 검색으로 대체됨 | Codex 샌드박스가 외부 네트워크를 막은 것. `codex -c 'sandbox_workspace_write.network_access=true'` 로 실행하거나 `~/.codex/config.toml` 에 같은 설정을 둔다 |
+| `ModuleNotFoundError: requests` | `pip install -r requirements.txt` |
+| 딥링크를 열었는데 목록 화면만 뜸 | URL 이 중간에 잘린 것. 결과 JSON 의 `딥링크` 값을 통째로 복사 |
+
 ## 소스 한계
 
 자동 검색은 ebid 만. 나라장터·EIASS·관보는 `skills/ebid/references/소스-접근성.md` 참고.

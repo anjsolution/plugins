@@ -49,3 +49,38 @@ def test_prog_sts_fallback_by_initial():
 def test_fmt_dt():
     assert nz.fmt_dt("202603261400") == "2026-03-26 14:00"
     assert nz.fmt_dt("20260326") == "2026-03-26"
+
+
+CONTRACT = {"noti_cls": "SV", "cntr_nm": "세종포천선(세종-천안) ITS구축 책임감리용역", "cntg_date": "20260527",
+            "g2b_snd_cpt_terms": "일반경쟁", "cntr_amt": 706520000, "com_nm": "대영유비텍 주식회사",
+            "biz_no": "1148164393", "stl_noti_no": "20260345441", "svsn_dept_nm": "시설처", "cntr_dept_nm": "재무부"}
+
+
+def test_normalize_contract_exposes_contract_number_and_linked_notice():
+    row = nz.normalize_contract(CONTRACT)
+    assert row["계약번호"] == "20260345441"
+    assert row["연결공고번호"] == "202603454"
+    assert row["발주유형"] == "용역" and row["체결일"] == "2026-05-27"
+
+
+def test_render_markdown_notice_tables_and_contract_table():
+    n = nz.normalize_notice({**ITEM, "noti_nm": "[긴급]교통관리시스템 용역"}, {"CTA": "일반경쟁"})
+    c = nz.normalize_contract(CONTRACT)
+    md = nz.render_markdown([n, c], keyword="ITS", period_label="1년")
+    assert "### [용역] 'ITS' 검색 결과 (1년, 1건)" in md
+    assert "| 공고번호 | 지역 | 공고명 | 설계금액 | 계약방법 | 공고일 | 상태 |" in md
+    assert "[\[긴급\]교통관리시스템 용역](https://ebid.ex.co.kr/default.do?menuId=NPRO12001" in md
+    assert "### [계약] 'ITS' 검색 결과 (1년, 1건)" in md
+    assert "| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |" in md
+    assert "| 용역 | 202603454 | 세종포천선(세종-천안) ITS구축 책임감리용역 | 일반경쟁 | 114-81-64393 | 대영유비텍 주식회사 | 706,520,000 | 2026-05-27 |" in md
+    assert "[공사]" not in md  # 빈 유형은 표를 만들지 않는다
+
+
+def test_render_markdown_empty():
+    assert "검색 결과 없음" in nz.render_markdown([], keyword="x", period_label="1년")
+
+
+def test_biz_no_format():
+    assert nz._biz_no("1148164393") == "114-81-64393"
+    assert nz._biz_no("") == "-"
+    assert nz._biz_no("12345") == "12345"

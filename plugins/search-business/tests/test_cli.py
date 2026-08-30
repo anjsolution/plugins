@@ -31,3 +31,8 @@ def test_fetch_without_out_or_list_exit_2(tmp_path):
 def test_result_docstring_has_no_from_to():
     src = (SCRIPTS / "ebid_result.py").read_text(encoding="utf-8")
     assert "--from" not in src.split('"""')[1]
+
+
+def test_search_help_mentions_md(tmp_path):
+    r = run("ebid_search.py", "--help", cwd=tmp_path)
+    assert "--md" in r.stdout

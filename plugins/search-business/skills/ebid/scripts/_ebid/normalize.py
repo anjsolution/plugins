@@ -129,6 +129,7 @@ def normalize_contract(item: dict[str, Any]) -> dict[str, Any]:
         "계약금액원": item.get("cntr_amt"),
         "업체명": item.get("com_nm"),
         "사업자번호": item.get("biz_no"),
+        "계약번호": stl,
         "연결공고번호": stl[:-2] if len(stl) > 2 else stl,
         # 주관부서 = 실수요 부서("시설처 전기부" 등) — 계약부서(재무부 류 행정 부서)와 구분
         "주관부서": item.get("svsn_dept_nm"),
@@ -150,3 +151,57 @@ def print_table(rows: list[dict[str, Any]]) -> None:
             print(f"[계약/{r['발주유형']}] {r['체결일']} | {r['주관부서'] or '-'}"
                   f" | {r['계약방법']} | {amt}원 | 공고 {r['연결공고번호']}"
                   f" | {r['계약명']} | {r['업체명']}")
+
+
+def _md_escape(text: Any) -> str:
+    """마크다운 표 셀·링크 텍스트용 이스케이프 — `|` 와 링크 문법과 충돌하는 `[ ]` 를 보호한다."""
+    return str(text or "").replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
+
+
+def _biz_no(value: Any) -> str:
+    """사업자번호 10자리를 000-00-00000 로. 10자리 숫자가 아니면 원문 그대로."""
+    digits = str(value or "").strip()
+    if len(digits) == 10 and digits.isdigit():
+        return f"{digits[:3]}-{digits[3:5]}-{digits[5:]}"
+    return digits or "-"
+
+
+def _amount(value: Any) -> str:
+    return f"{value:,}" if isinstance(value, int) else (str(value) if value else "-")
+
+
+def render_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
+    """검색 결과를 대화창에 그대로 붙일 마크다운으로 만든다.
+
+    - 입찰공고: 발주유형(공사·용역·물품)별 표. 공고명은 딥링크를 건 마크다운 링크.
+    - 계약: 단일 표 (구분·공고번호·계약명·계약방법·사업자번호·계약업체·총계약금액·체결일).
+    표 제목: `### [유형] '키워드' 검색 결과 (기간, n건)`.
+    """
+    out: list[str] = []
+    notices = [r for r in rows if r.get("구분") == "입찰공고"]
+    contracts = [r for r in rows if r.get("구분") == "계약"]
+    for label in ("공사", "용역", "물품"):
+        group = [r for r in notices if r.get("발주유형") == label]
+        if not group:
+            continue
+        out.append(f"### [{label}] '{keyword}' 검색 결과 ({period_label}, {len(group)}건)\n")
+        out.append("| 공고번호 | 지역 | 공고명 | 설계금액 | 계약방법 | 공고일 | 상태 |")
+        out.append("|---|---|---|---:|---|---|---|")
+        for r in group:
+            name = _md_escape(r.get("공고명"))
+            link = f"[{name}]({r['딥링크']})" if r.get("딥링크") else name
+            out.append(f"| {r.get('공고번호')} | {_md_escape(r.get('지역'))} | {link} | {_amount(r.get('설계금액원'))}"
+                       f" | {_md_escape(r.get('계약방법'))} | {r.get('공고일')} | {_md_escape(r.get('상태'))} |")
+        out.append("")
+    if contracts:
+        out.append(f"### [계약] '{keyword}' 검색 결과 ({period_label}, {len(contracts)}건)\n")
+        out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |")
+        out.append("|---|---|---|---|---|---|---:|---|")
+        for r in contracts:
+            out.append(f"| {_md_escape(r.get('발주유형'))} | {r.get('연결공고번호') or '-'} | {_md_escape(r.get('계약명'))}"
+                       f" | {_md_escape(r.get('계약방법'))} | {_biz_no(r.get('사업자번호'))} | {_md_escape(r.get('업체명'))}"
+                       f" | {_amount(r.get('계약금액원'))} | {r.get('체결일')} |")
+        out.append("")
+    if not out:
+        out.append(f"'{keyword}' 검색 결과 없음 ({period_label}).")
+    return "\n".join(out).rstrip() + "\n"

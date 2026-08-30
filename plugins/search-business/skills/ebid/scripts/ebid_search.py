@@ -5,6 +5,7 @@
     python <스킬폴더>/scripts/ebid_search.py --keyword "구내통신" --from 20260101
     python <스킬폴더>/scripts/ebid_search.py --keyword "터널관리" --type 계약 --from 20190101
     python <스킬폴더>/scripts/ebid_search.py --keyword "VMS" --type 공사 물품 --table
+    python <스킬폴더>/scripts/ebid_search.py --keyword "ITS" --type 공사 용역 물품 계약 --md   # 대화창용
 
 - 기간 미지정 시 최근 1년. 공고번호 조회에는 기간 개념이 없다(ebid_result / ebid_fetch).
 - 출력은 "아는 필드는 한글 키로 정규화 + 나머지 원본 필드 passthrough".
@@ -32,7 +33,7 @@ import requests
 from _ebid.client import EbidClient
 from _ebid.contracts import search_contracts
 from _ebid.normalize import (fetch_cpt_terms_labels, normalize_contract,
-                             normalize_notice, print_table)
+                             normalize_notice, print_table, render_markdown)
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
 REQUEST_INTERVAL_SECONDS = 1.0
@@ -50,6 +51,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="검색 대상 (기본: 공사 용역 물품. '계약'은 계약공개현황 — 수의·지명 포함 체결 원장)",
     )
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 표로 출력")
+    parser.add_argument("--md", action="store_true",
+                        help="JSON 대신 대화창용 마크다운 표로 출력 (유형별 표 + 공고명 딥링크, 계약은 단일 표)")
     return parser.parse_args(argv)
 
 
@@ -101,7 +104,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     rows.sort(key=lambda r: r.get("공고일") or r.get("체결일") or "", reverse=True)
-    if args.table:
+    if args.md:
+        period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
+        print(render_markdown(rows, keyword=args.keyword, period_label=period), end="")
+    elif args.table:
         print_table(rows)
     else:
         print(json.dumps(rows, ensure_ascii=False, indent=2))

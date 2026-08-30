@@ -20,7 +20,7 @@ def test_links_all_references_once_level():
 
 def test_rules_present():
     text = SKILL.read_text(encoding="utf-8")
-    for must in ("최근 1년", "--type 계약", "공고번호", "딥링크", "--out", "--list", "kordoc"):
+    for must in ("최근 1년", "ebid_search_common.py", "ebid_search_contract.py", "--detail", "공고번호", "딥링크", "--out", "--list", "kordoc"):
         assert must in text
     assert "20120101" not in text
     assert "제조구매" not in text

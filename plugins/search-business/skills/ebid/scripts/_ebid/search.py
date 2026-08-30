@@ -37,7 +37,7 @@ def resolve_date_window(
     """--from/--to 문자열을 ebid 포맷(YYYYMMDD) 으로 정규화하고, 생략된 값을 기본값으로 채운다.
 
     lookback_days: --from 생략 시 종료일에서 거슬러 올라갈 일수. 대화형 키워드 검색
-    (ebid_search.py)은 최근 1년로 좁혀 쓴다. 공고번호 단건 조회(resolve_notice)는
+    (ebid_search_common.py 등)은 최근 1년으로 좁혀 쓴다. 공고번호 단건 조회(resolve_notice)는
     날짜를 아예 안 보내는 방식이라 이 함수를 명시 지정 시에만 쓴다.
     """
     to_date_obj = _parse_yyyymmdd(format_ebid_date(date_to)) if date_to else date.today()

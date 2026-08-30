@@ -1,6 +1,6 @@
 # ebid API 필드 사전
 
-`ebid_search.py` / `ebid_result.py` 가 다루는 원본 API 필드의 **의미·값 분포·검증 방법** 원장.
+`ebid_search_common.py` / `ebid_search_contract.py` / `ebid_result.py` 가 다루는 원본 API 필드의 **의미·값 분포·검증 방법** 원장.
 코드→한글 라벨 값 자체는 `scripts/_ebid/codes.json` 에 있다 — 이 문서는 그 매핑을 믿어도 되는 **근거**와,
 새 코드·필드가 나타났을 때 **같은 방법으로 재검증**하기 위한 기록이다.
 
@@ -9,7 +9,7 @@
 - 출력 원칙 — passthrough 정규화
 - 입찰공고 목록 API 필드표
 - 상태코드(prog_sts) 해독
-- 계약공개현황 API 필드표 / 계약 상세·웹 진입
+- 계약공개현황 API 필드표 / 계약 상세 API 필드표 / 계약 화면 구조·웹 진입
 - 지역(area) 코드 확정 근거
 - 딥링크 조립 규칙
 
@@ -104,22 +104,66 @@ API 에 새 필드가 생기면 자동으로 노출된다. 제외는 전 건 상
 | `stl_noti_no` | ✔ 계약번호(+연결공고번호) | **11자리 = 공고번호 9자리 + 접미 2자리.** 접미 앞자리 = 묶음 공고 안의 세부 건 순번(202603454 의 6건 묶음 감리용역이 `…31/41/51/61` 로 갈라짐), 뒷자리 = `1`(차수로 추정 — 재입찰 사례 미확인). 끝 2자리를 떼면 공고번호 | 표본 39건 전부 11자리, 접미 `11`×35 |
 | `svsn_dept_nm` | ✔ **주관부서** | **실수요 부서** — "시설처 전기부"×137, "부산경남본부 교통부"×29 등 | distinct 105. 분석 시 계약부서 말고 이걸 쓸 것 |
 | `cntr_dept_nm` | ✔ 계약부서 | 계약 행정 부서("○○본부 재무부" 류) | |
-| `bid_cls` | passthrough | 입찰 구분 추정 — 01×307, 03×313. 수의계약 여부와 상관 가능성, 미검증 | |
+| `bid_cls` | passthrough | 입찰 구분 — **01=입찰공고 경유(일반·제한·지명경쟁), 03=견적(전자수의·희망수량)**. 2026-07~08 700건 크로스탭 모순 0건 | 01×311, 03×389 |
 | `svsn_dept_cd`, `cntr_dept` | passthrough | 부서 코드(이름 필드의 코드짝) | |
 | `cntr_id`, `org_cntr_id`, `noti_id` | passthrough | 내부 UUID | |
 
-### 계약 상세 API·웹 진입
+### 계약공개현황 검색 파라미터 (화면 `es-sp-cntr-open-list` 바인딩, 실측 2026-08-30)
 
-- **상세 API**: `POST /ui/sp/expro/cntropen/findInfoCntrOpnDetail.do` body `{"cntr_id": "<cntr_id>"}`,
-  menucode NPRO20001 — 200 확인. 응답: `cntrOpnDetail`(계약기간 cntr_sd/cntr_ed, 발주처 poor,
-  수의사유 claus_cd_etc_cause 등) + `repVdInfo`(대표자·지분율·주소) + `bidInfo` + `deptAddr`(담당자·연락처).
-- **`bidInfo: null` 판별법**: 지명경쟁·전자수의로 입찰공고 시스템에 없는 건은 입찰공고 검색·
-  `findInfoResultDetail.do`(500 반환) 모두 실패하고 계약 상세의 `bidInfo` 도 null — 공고 딥링크 조립 불가.
-- **웹 딥링크**: `https://ebid.ex.co.kr/default.do?menuId=NPRO20001` 이 비로그인(GUEST)으로 계약공개현황
-  조회 화면을 연다. **건별 URL 파라미터 프리필은 불가 확정** — 쉘(`default.do`)은 모든 쿼리 파라미터를
-  화면에 배달하지만, 계약 화면(`cntropen/em-sp-cntr-open.html`)은 `this.params` 를 읽지 않고 목록 행
-  클릭으로만 상세를 연다. 공고 화면은 `initialized` 에서 `noti_cont_id` 가 있으면 상세로 직행하는
-  코드가 있어 딥링크가 동작한다 — 차이는 순전히 화면 코드의 opt-in 여부.
+| 파라미터 | 의미 | 실측 |
+|---|---|---|
+| `from_yyyymmdd`, `to_yyyymmdd` | 체결일 범위 | 필수. 7년 단일 호출 동작 |
+| `cntr_nm` | 계약명 부분일치 | "터널" 3개월 193건 |
+| `gubun` | 발주유형(CT/SV/MT …) — 공통코드 `PE000*`/`CT_USE_YN` | `CT` → 237건. **SX 휴게소·IF 단가·RB 감정평가도 계약공개 대상(Y)** |
+| `method` | 계약방법 코드 — 공통코드 `PE080*`/`BID_USE_YN`: CTA 일반경쟁·CTE 지명경쟁·CTH 제한경쟁·CTL 전자수의 | `CTH` → 379건 |
+| `stl_noti_no` | 계약번호(11자리) 정확일치 | 1건 |
+| `oper_org_cd`, `stl_noti_nos` | 화면 바인딩만 확인, 미검증 | |
+
+`ebid_search_contract.py` 는 `cntr_nm` + 기간 + (`--type` 시) `gubun` 을 보낸다.
+
+### 계약 상세 API — 필드표 (`--detail`)
+
+- **엔드포인트**: `POST /ui/sp/expro/cntropen/findInfoCntrOpnDetail.do`, menucode NPRO20001, 200 확인.
+- **body 는 목록 행 전체** (화면 `es-sp-cntr-open-detail` 이 `detailData` = 클릭한 행을 그대로 보냄).
+  **`{"cntr_id"}` 만 보내면 `bidInfo`·`cntrBasInfo` 가 null** 로 온다 — 2026-08-30 실측으로 이전 기록
+  ("body `{cntr_id}`", "bidInfo null = 지명·전자수의 판별법")을 **정정**. 행 전체를 보내면 일반·제한·지명·
+  전자수의 12/12 건 모두 채워지고, **`희망수량` 3/3 건만 `bidInfo` null**(`cntrBasInfo` 는 있음). 전자수의도
+  전자 견적을 거치므로 설계금액·예정가격·개찰일시가 있다.
+- 응답 6섹션. `normalize_contract_detail()` 이 한글 키 한 겹으로 편다.
+
+| 섹션 | 원본 키 | 정규화 | 비고 |
+|---|---|---|---|
+| `cntrOpnDetail` | `cntr_sd`, `cntr_ed`, `cntr_day` | 계약기간(`sd~ed`), 계약일수 | 계약 종료일 → 재발주 시점 추정 |
+| | `poor` | 발주처 | "전북본부", "보은지사" 등 |
+| | `jhhm` + `claus_cd_etc_cause`, `claus_cd` | 수의근거(`조문 — 사유`), 수의근거코드 | 예: "026조 01항 05호 가목 — 추정가격 … 5천만원 이하", "혁신제품 구매". 경쟁입찰 건은 null |
+| | `jhhmj/jhhmh/jhhmo/jhhmm` | passthrough 안 함 | `jhhm` 의 분해값(조/항/호/목) |
+| `repVdInfo` (list) | `vd_nm`, `rep_nm`, `dtl_addr`, `phone_no`, `shar_rate` | 계약업체상세[{업체명, 대표자, 주소, 전화, 지분율}] | 공동도급이면 여러 행(60 %/40 % 실측). `vd_sn` 은 의미 미확정 |
+| `deptAddr` | `chr_nm`, `chr_dept_phone_no1~3`, `chr_dept_addr`, `chr_dept_post_no1~2` | 담당자, 담당부서전화(`063-840-0208`), 담당부서주소, 담당부서우편번호 | 목록의 `svsn_dept_nm`(주관부서)와 별개인 **계약 담당자** |
+| `bidInfo` (희망수량 제외) | `dsgng_amt`, `open_dt`, `cpt_terms_str`, `lmtcpt_apply_bas_cd_str`, `stl_terms_str`, `pq_type_str`, `bid_nm` | 설계금액원, 개찰일시, 경쟁방법, 제한기준("지역"), 낙찰방법("적격심사"/"중소기업 적격심사"/"기술용역 적격심사"), PQ | `unsc_dty_yn`, `plrl_prc_yn` 은 미소비 |
+| `cntrBasInfo` | `expt_amt`, `noti_nm`, `noti_date` | 예정가격원, 공고명(`[긴급][국제입찰]` 접두 포함), 공고일 | 설계금액·예정가격·계약금액 3종으로 낙찰률 계산 가능 |
+| `getSwYn` | `sw_yn` | SW계약여부 | Y 면 화면에 "SW사업 계약정보" 팝업 버튼 |
+
+- **SW 팝업 API** `POST /ui/sp/expro/cntropen/getSwInfo.do` body `{cntr_id}`: `cntrData`(**계약번호 `cntr_no`** —
+  목록엔 없음), 하도급 현황 `sbcnData`, 감리 `ctsvcnData`, 감독원 `svcnUserData`, 기성·준공검사 `accountList`,
+  기성 지급 `payData`. SW 계약이 아니어도 200 + 빈 배열 + `cntrData` 는 온다. 플러그인은 아직 미사용.
+
+### 계약 화면 구조·웹 진입 (소스 확인 2026-08-30)
+
+- 쉘 `default.do?menuId=…` 는 `findListMenu.do` 의 메뉴 목록(GUEST 52개)에서 `menu_url` 을 찾아 컴포넌트를 띄우고
+  `UT.parseUrlParam(location.href)` 를 `params` 로 넘긴다. 라우팅은 **메뉴 목록에 있는 ID 만**.
+- 계약 메뉴: `NPRO20001 계약공개현황 조회 → cntropen/em-sp-cntr-open.html`, **`NPRO20002 변경계약현황 조회 →
+  cntropen/em-sp-cntr-modify.html`**(미구현 진입점). 상세 컴포넌트를 직접 가리키는 메뉴는 없다.
+- `em-sp-cntr-open`(컨테이너) → `es-sp-cntr-open-list`(목록: `load` 가 곧바로 `findListCntrOpn`) →
+  `cntr_nm` 셀 클릭 `fire('show-detail', 행)` → `onShowDetail(e, data)` → `es-sp-cntr-open-detail.load(param, data)`.
+  **세 컴포넌트 어디도 `this.params` 를 읽지 않는다** → 기간 프리필·건별 딥링크 불가 확정.
+  (`es-sp-cntr-open-detail.html?bust=…` 요청은 딥링크가 아니라 컴포넌트 템플릿 HTML import.)
+- **웹 진입**: `https://ebid.ex.co.kr/default.do?menuId=NPRO20001` 이 비로그인(GUEST)으로 조회 화면을 연다.
+  건별 상세는 페이지를 연 뒤 콘솔/자동화에서
+  `document.querySelector('em-sp-cntr-open').onShowDetail(null, {cntr_id: '<cntr_id>'})` 를 호출하면 렌더된다
+  (헤드리스 Chrome 실검증 — 제목 "계약공개현황 상세"·담당자·계약기간 표시). 공유 가능한 URL 은 아니다.
+- `bid_cls`=01 건은 입찰공고가 있으므로 공고 딥링크(§딥링크)로 대신 연결할 수 있다 — 상세 응답에는
+  `noti_cont_id` 가 없으므로 `stl_noti_no[:-2]`(공고번호)로 공고 검색을 거쳐 조립한다. 03(전자수의·희망수량)은
+  입찰공고 목록에 없어 딥링크 불가.
 
 ## 지역(area) 코드 확정 근거
 

@@ -140,6 +140,54 @@ def normalize_contract(item: dict[str, Any]) -> dict[str, Any]:
     row.update({k: v for k, v in item.items() if k not in consumed})
     return row
 
+def _join_phone(*parts: Any) -> str:
+    return "-".join(str(x) for x in parts if x)
+
+
+def normalize_contract_detail(detail: dict[str, Any]) -> dict[str, Any]:
+    """findInfoCntrOpnDetail 응답(6섹션)을 한글 키 한 겹으로 편다.
+
+    bidInfo·cntrBasInfo 가 없는 건(희망수량 등)은 해당 키가 None/"" 로 남는다.
+    필드 근거는 references/ebid-필드사전.md §계약 상세 API.
+    """
+    opn = detail.get("cntrOpnDetail") or {}
+    dept = detail.get("deptAddr") or {}
+    bid = detail.get("bidInfo") or {}
+    bas = detail.get("cntrBasInfo") or {}
+    sw = detail.get("getSwYn") or {}
+    vendors = detail.get("repVdInfo") or []
+    sd, ed = fmt_dt(opn.get("cntr_sd")), fmt_dt(opn.get("cntr_ed"))
+    clause, cause = opn.get("jhhm") or "", opn.get("claus_cd_etc_cause") or ""
+    return {
+        "계약기간": f"{sd}~{ed}" if sd or ed else "",
+        "계약일수": opn.get("cntr_day"),
+        "발주처": opn.get("poor") or "",
+        "수의근거": " — ".join(x for x in (clause, cause) if x),
+        "수의근거코드": opn.get("claus_cd") or "",
+        "담당자": dept.get("chr_nm") or "",
+        "담당부서전화": _join_phone(dept.get("chr_dept_phone_no1"), dept.get("chr_dept_phone_no2"),
+                                   dept.get("chr_dept_phone_no3")),
+        "담당부서주소": (dept.get("chr_dept_addr") or "").strip(),
+        "담당부서우편번호": _join_phone(dept.get("chr_dept_post_no1"), dept.get("chr_dept_post_no2")),
+        "계약업체상세": [{
+            "업체명": v.get("vd_nm") or "", "대표자": v.get("rep_nm") or "",
+            "주소": (v.get("dtl_addr") or "").strip(), "전화": v.get("phone_no") or "",
+            "지분율": v.get("shar_rate") or "",
+        } for v in vendors],
+        # 아래는 bidInfo / cntrBasInfo — 전자수의 포함 대부분 채워짐, 희망수량은 bidInfo 없음
+        "설계금액원": bid.get("dsgng_amt"),
+        "예정가격원": bas.get("expt_amt"),
+        "개찰일시": fmt_dt(bid.get("open_dt")),
+        "경쟁방법": bid.get("cpt_terms_str") or "",
+        "제한기준": bid.get("lmtcpt_apply_bas_cd_str") or "",
+        "낙찰방법": bid.get("stl_terms_str") or "",
+        "PQ": bid.get("pq_type_str") or "",
+        "공고명": bas.get("noti_nm") or "",
+        "공고일": fmt_dt(bas.get("noti_date")),
+        "SW계약여부": sw.get("sw_yn") or "",
+    }
+
+
 def print_table(rows: list[dict[str, Any]]) -> None:
     for r in rows:
         if r["구분"] == "입찰공고":
@@ -170,21 +218,18 @@ def _amount(value: Any) -> str:
     return f"{value:,}" if isinstance(value, int) else (str(value) if value else "-")
 
 
-def render_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
-    """검색 결과를 대화창에 그대로 붙일 마크다운으로 만든다.
+def _table_title(label: str, keyword: str, period_label: str, n: int) -> str:
+    return f"### [{label}] '{keyword}' 검색 결과 ({period_label}, {n}건)\n"
 
-    - 입찰공고: 발주유형(공사·용역·물품)별 표. 공고명은 딥링크를 건 마크다운 링크.
-    - 계약: 단일 표 (구분·공고번호·계약명·계약방법·사업자번호·계약업체·총계약금액·체결일).
-    표 제목: `### [유형] '키워드' 검색 결과 (기간, n건)`.
-    """
+
+def render_notice_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
+    """입찰공고 검색 결과 → 발주유형(공사·용역·물품)별 표. 공고명은 딥링크를 건 마크다운 링크."""
     out: list[str] = []
-    notices = [r for r in rows if r.get("구분") == "입찰공고"]
-    contracts = [r for r in rows if r.get("구분") == "계약"]
     for label in ("공사", "용역", "물품"):
-        group = [r for r in notices if r.get("발주유형") == label]
+        group = [r for r in rows if r.get("발주유형") == label]
         if not group:
             continue
-        out.append(f"### [{label}] '{keyword}' 검색 결과 ({period_label}, {len(group)}건)\n")
+        out.append(_table_title(label, keyword, period_label, len(group)))
         out.append("| 공고번호 | 지역 | 공고명 | 설계금액 | 계약방법 | 공고일 | 상태 |")
         out.append("|---|---|---|---:|---|---|---|")
         for r in group:
@@ -193,15 +238,40 @@ def render_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: s
             out.append(f"| {r.get('공고번호')} | {_md_escape(r.get('지역'))} | {link} | {_amount(r.get('설계금액원'))}"
                        f" | {_md_escape(r.get('계약방법'))} | {r.get('공고일')} | {_md_escape(r.get('상태'))} |")
         out.append("")
-    if contracts:
-        out.append(f"### [계약] '{keyword}' 검색 결과 ({period_label}, {len(contracts)}건)\n")
-        out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |")
-        out.append("|---|---|---|---|---|---|---:|---|")
-        for r in contracts:
-            out.append(f"| {_md_escape(r.get('발주유형'))} | {r.get('연결공고번호') or '-'} | {_md_escape(r.get('계약명'))}"
-                       f" | {_md_escape(r.get('계약방법'))} | {_biz_no(r.get('사업자번호'))} | {_md_escape(r.get('업체명'))}"
-                       f" | {_amount(r.get('계약금액원'))} | {r.get('체결일')} |")
-        out.append("")
     if not out:
         out.append(f"'{keyword}' 검색 결과 없음 ({period_label}).")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render_contract_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: str,
+                             detail: bool = False) -> str:
+    """계약공개현황 검색 결과 → 단일 표. detail=True 면 `상세` 키의 항목을 열로 덧붙인다."""
+    if not rows:
+        return f"'{keyword}' 검색 결과 없음 ({period_label}).\n"
+    out = [_table_title("계약", keyword, period_label, len(rows))]
+    if detail:
+        out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 계약업체 | 대표자 | 총계약금액 | 예정가격 | 체결일"
+                   " | 계약기간 | 발주처 | 담당자 | 수의근거 |")
+        out.append("|---|---|---|---|---|---|---:|---:|---|---|---|---|---|")
+    else:
+        out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |")
+        out.append("|---|---|---|---|---|---|---:|---|")
+    for r in rows:
+        head = (f"| {_md_escape(r.get('발주유형'))} | {r.get('연결공고번호') or '-'} | {_md_escape(r.get('계약명'))}"
+                f" | {_md_escape(r.get('계약방법'))}")
+        if not detail:
+            out.append(f"{head} | {_biz_no(r.get('사업자번호'))} | {_md_escape(r.get('업체명'))}"
+                       f" | {_amount(r.get('계약금액원'))} | {r.get('체결일')} |")
+            continue
+        d = r.get("상세") or {}
+        reps = ", ".join(f"{v['대표자']}({v['지분율']})" if v.get("지분율") else v["대표자"]
+                         for v in d.get("계약업체상세") or [] if v.get("대표자"))
+        contact = d.get("담당자") or ""
+        if d.get("담당부서전화"):
+            contact = f"{contact} ({d['담당부서전화']})".strip()
+        out.append(f"{head} | {_md_escape(r.get('업체명'))} | {_md_escape(reps) or '-'}"
+                   f" | {_amount(r.get('계약금액원'))} | {_amount(d.get('예정가격원'))} | {r.get('체결일')}"
+                   f" | {d.get('계약기간') or '-'} | {_md_escape(d.get('발주처')) or '-'} | {_md_escape(contact) or '-'}"
+                   f" | {_md_escape(d.get('수의근거')) or '-'} |")
+    out.append("")
     return "\n".join(out).rstrip() + "\n"

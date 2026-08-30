@@ -58,3 +58,12 @@ def test_keyword_optional_on_both_search_clis(tmp_path):
         assert r.returncode == 2 and "날짜" in r.stderr, script
         h = run(script, "--help", cwd=tmp_path).stdout
         assert "--keyword" in h and "required" not in h.split("--keyword")[1].split("--")[0]
+
+
+def test_no_keyword_requires_from(tmp_path):
+    for script in ("ebid_search_common.py", "ebid_search_contract.py"):
+        r = run(script, cwd=tmp_path)                       # 키워드도 --from 도 없음
+        assert r.returncode == 2 and "--from" in r.stderr and "--keyword" in r.stderr, script
+        r = run(script, "--to", "20260830", cwd=tmp_path)   # --to 만으로는 부족
+        assert r.returncode == 2 and "--from" in r.stderr, script
+        assert r.stdout == ""                                # 네트워크 호출 전에 멈춤

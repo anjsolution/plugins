@@ -9,8 +9,8 @@
     python <스킬폴더>/scripts/ebid_search_common.py --from 20260815 --type 용역 --md   # 키워드 없이 최근 공고 전체
 
 - 기간 미지정 시 최근 1년. 공고번호 조회에는 기간 개념이 없다(ebid_result / ebid_fetch).
-- --keyword 생략 시 검색어 없이 기간 내 전체를 가져온다(요청 본문에서 noti_nm 제외). 건수 제한은 두지
-  않으므로 호출 측이 --from/--to 로 기간을 좁혀야 한다(SKILL.md 검색 규칙).
+- --keyword 생략 시 검색어 없이 기간 내 전체를 가져온다(요청 본문에서 noti_nm 제외). 이때 --from 은 필수
+  (없으면 종료코드 2). 건수 제한은 두지 않으므로 호출 측이 기간을 좁혀야 한다(SKILL.md 검색 규칙).
 - 출력은 "아는 필드는 한글 키로 정규화 + 나머지 원본 필드 passthrough".
   필드 의미·상태코드·딥링크 규칙은 references/ebid-필드사전.md.
 Exit: 0 성공 / 1 통신·응답 실패 / 2 인자·날짜 오류
@@ -44,7 +44,7 @@ SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ebid 입찰공고 검색(공사·용역·물품). 계약공개현황은 ebid_search_contract.py")
-    parser.add_argument("--keyword", default="", help="공고명에 포함될 검색어 (생략 시 기간 내 전체 — 반드시 --from/--to 로 기간을 좁힐 것)")
+    parser.add_argument("--keyword", default="", help="공고명에 포함될 검색어 (생략 시 기간 내 전체 — 이때 --from 필수)")
     parser.add_argument("--from", dest="date_from", help="시작일 YYYYMMDD (생략 시 최근 1년)")
     parser.add_argument("--to", dest="date_to", help="종료일 YYYYMMDD (생략 시 오늘)")
     parser.add_argument(
@@ -60,6 +60,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not args.keyword and not args.date_from:
+        print("[ebid] --keyword 없이 검색하려면 --from 이 필수입니다 (기간 내 전체를 가져오므로). "
+              "예: --from 20260815 [--to 20260830] [--type 용역]", file=sys.stderr)
+        return 2
     try:
         from_date, to_date = resolve_date_window(
             args.date_from, args.date_to, lookback_days=SEARCH_LOOKBACK_DAYS)
@@ -75,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
 
     if not args.keyword:
-        print(f"[ebid] 키워드 없음 → {from_date}~{to_date} 기간 내 전체 공고. 건수가 많으면 --from/--to 를 좁힐 것",
+        print(f"[ebid] 키워드 없음 → {from_date}~{to_date} 기간 내 전체 공고. 건수가 많으면 기간을 더 좁힐 것",
               file=sys.stderr)
     overrides: dict[str, Any] = {"arr_status": STATUS_FILTER_OVERRIDE}
     if args.keyword:

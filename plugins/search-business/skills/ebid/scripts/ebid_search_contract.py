@@ -9,8 +9,8 @@
     python <스킬폴더>/scripts/ebid_search_contract.py --from 20260815 --type 용역 --md  # 키워드 없이 최근 계약 전체
 
 - 기간 미지정 시 최근 1년(체결일 기준).
-- --keyword 생략 시 검색어 없이 기간 내 전체를 가져온다(요청 본문에서 cntr_nm 제외). 건수 제한은 두지
-  않으므로 호출 측이 --from/--to 로 기간을 좁혀야 한다(SKILL.md 검색 규칙).
+- --keyword 생략 시 검색어 없이 기간 내 전체를 가져온다(요청 본문에서 cntr_nm 제외). 이때 --from 은 필수
+  (없으면 종료코드 2). 건수 제한은 두지 않으므로 호출 측이 기간을 좁혀야 한다(SKILL.md 검색 규칙).
 - --detail: 건마다 상세 API 를 1회 더 호출해 계약기간·발주처·담당자/연락처·낙찰업체 대표/주소/지분·
   수의근거·설계금액/예정가격/개찰일시를 `상세` 키에 붙인다. 기본 상한 30건(--detail-limit).
 - 계약은 건별 웹 딥링크가 없다. 조회 화면 진입: https://ebid.ex.co.kr/default.do?menuId=NPRO20001
@@ -48,7 +48,7 @@ SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="ebid 계약공개현황 검색(수의·지명 포함 체결 원장). 입찰공고는 ebid_search_common.py")
-    parser.add_argument("--keyword", default="", help="계약명에 포함될 검색어 (생략 시 기간 내 전체 — 반드시 --from/--to 로 기간을 좁힐 것)")
+    parser.add_argument("--keyword", default="", help="계약명에 포함될 검색어 (생략 시 기간 내 전체 — 이때 --from 필수)")
     parser.add_argument("--from", dest="date_from", help="체결일 시작 YYYYMMDD (생략 시 최근 1년)")
     parser.add_argument("--to", dest="date_to", help="체결일 종료 YYYYMMDD (생략 시 오늘)")
     parser.add_argument("--type", dest="types", nargs="+", choices=["공사", "용역", "물품"],
@@ -65,6 +65,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not args.keyword and not args.date_from:
+        print("[ebid] --keyword 없이 검색하려면 --from 이 필수입니다 (기간 내 전체를 가져오므로). "
+              "예: --from 20260815 [--to 20260830] [--type 용역]", file=sys.stderr)
+        return 2
     try:
         from_date, to_date = resolve_date_window(
             args.date_from, args.date_to, lookback_days=SEARCH_LOOKBACK_DAYS)
@@ -83,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
               file=sys.stderr)
 
     if not args.keyword:
-        print(f"[ebid] 키워드 없음 → {from_date}~{to_date} 기간 내 전체 계약. 건수가 많으면 --from/--to 를 좁힐 것",
+        print(f"[ebid] 키워드 없음 → {from_date}~{to_date} 기간 내 전체 계약. 건수가 많으면 기간을 더 좁힐 것",
               file=sys.stderr)
     client = EbidClient(max_retries=MAX_RETRIES)
     classes = [NOTICE_CLASS_LABELS[t] for t in args.types] if args.types else [None]

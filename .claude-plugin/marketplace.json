@@ -7,5 +7,18 @@
     "email": "khchoi@anjsol.co.kr",
     "url": "https://github.com/anjsolution"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "search-business",
+      "source": "./plugins/search-business",
+      "description": "공공 발주 공고(한국도로공사 ebid) 검색·개찰결과·첨부 수집",
+      "version": "0.1.0",
+      "keywords": [
+        "ebid",
+        "입찰공고",
+        "계약",
+        "첨부"
+      ]
+    }
+  ]
 }

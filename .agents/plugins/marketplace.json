@@ -3,5 +3,18 @@
   "interface": {
     "displayName": "ANJSOLUTION marketplace"
   },
-  "plugins": []
+  "plugins": [
+    {
+      "name": "search-business",
+      "source": {
+        "source": "local",
+        "path": "./plugins/search-business"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Business & Operations"
+    }
+  ]
 }

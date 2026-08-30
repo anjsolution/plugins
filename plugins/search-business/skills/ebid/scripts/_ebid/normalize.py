@@ -9,13 +9,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .client import BASE_URL, EbidClient
+from .client import BASE_URL
 
 CODES: dict[str, Any] = json.loads((Path(__file__).with_name("codes.json")).read_text(encoding="utf-8"))
 CLASS_LABEL_BY_CODE: dict[str, str] = CODES["발주유형"]
 PROG_STS_EXACT: dict[str, str] = CODES["상태정확"]
 PROG_STS_BY_INITIAL: dict[str, str] = CODES["상태첫글자"]
-CPT_TERMS_FALLBACK: dict[str, str] = CODES["계약방법폴백"]
+# 계약방법 코드표 = 사이트 공통코드 PE080*/BID_USE_YN (CTA·CTE·CTH·CTL). PE075* 실시간 조회는 빈 응답이라
+# 제거했다(2026-08-30 실측) — 새 코드가 passthrough 로 나타나면 PE080 을 다시 조회해 여기에 추가한다.
+CPT_TERMS_LABELS: dict[str, str] = CODES["계약방법"]
 AREA_LABELS: dict[str, str] = CODES["지역"]
 NOTICE_CONSTANT_FIELDS: set[str] = set(CODES["제외필드"])
 DEEPLINK_MENU: dict[str, tuple[str, str]] = {k: tuple(v) for k, v in CODES["딥링크메뉴"].items()}
@@ -35,29 +37,6 @@ def build_notice_deeplink(item: dict[str, Any]) -> str:
         url += f"&remicon={item.get('rmcn_yn') or 'N'}"
     return url
 
-def fetch_cpt_terms_labels(client: EbidClient) -> dict[str, str]:
-    """계약방법 코드 라벨(PE075*)을 사이트 공통코드 API 에서 조회. 실패 시 폴백."""
-    try:
-        header_name, token = client.ensure_csrf_token()
-        r = client.session.post(
-            BASE_URL + "/findCommonCodeAttrCdList.do",
-            json={"grp_cd": "PE075*"},
-            headers={"Accept": "application/json", "Content-Type": "application/json",
-                     "X-Requested-With": "XMLHttpRequest", header_name: token,
-                     "Referer": BASE_URL + "/default.do", "menucode": "NPRO11001"},
-            timeout=20,
-        )
-        data = json.loads(r.content.decode("utf-8"))
-        rows = data if isinstance(data, list) else next(
-            (v for v in data.values() if isinstance(v, list)), [])
-        labels = {row["data"]: row["label"] for row in rows
-                  if isinstance(row, dict) and row.get("data") and row.get("label")}
-        if labels:
-            return {**CPT_TERMS_FALLBACK, **labels}
-    except Exception:  # 라벨은 부가 정보 — 조회 실패가 검색을 막지 않는다
-        pass
-    return dict(CPT_TERMS_FALLBACK)
-
 def prog_sts_label(code: str | None) -> str:
     if not code:
         return ""
@@ -72,13 +51,14 @@ def fmt_dt(value: Any) -> str:
         return f"{s[:4]}-{s[4:6]}-{s[6:8]}"
     return s
 
-def normalize_notice(item: dict[str, Any], cpt_labels: dict[str, str]) -> dict[str, Any]:
+def normalize_notice(item: dict[str, Any], cpt_labels: dict[str, str] | None = None) -> dict[str, Any]:
     """아는 필드만 한글 키로 정규화하고, 나머지 원본 필드는 그대로 통과시킨다.
 
     화이트리스트 방식은 area(지역) 유실 사고의 원인 — 정규화에
     소비되지 않은 필드는 버리지 않고 원본 키 그대로 덧붙인다. 그래야 API 에
     새 필드가 생겨도 자동으로 노출된다. 제외는 NOTICE_CONSTANT_FIELDS 만.
     """
+    cpt_labels = CPT_TERMS_LABELS if cpt_labels is None else cpt_labels
     sts = item.get("prog_sts") or ""
     sts_label = prog_sts_label(sts)
     cpt = item.get("cpt_terms") or ""

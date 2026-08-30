@@ -27,7 +27,7 @@ from typing import Any
 from _ebid.attachments import MAX_RETRIES, REQUEST_INTERVAL_SECONDS, resolve_notice
 from _ebid.client import EbidClient
 from _ebid.errors import NOTICE_NO_HINT, KoreanArgumentParser, is_notice_no, report_error
-from _ebid.normalize import fetch_cpt_terms_labels, fmt_dt, normalize_notice
+from _ebid.normalize import fmt_dt, normalize_notice
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = KoreanArgumentParser(description="ebid 공고 상세·입찰결과 조회")
@@ -94,8 +94,7 @@ def main(argv: list[str] | None = None) -> int:
               f"조회했으니 공고번호가 정확한지 확인하세요.", file=sys.stderr)
         return 2
 
-    cpt_labels = fetch_cpt_terms_labels(client)
-    summary = normalize_notice(notice, cpt_labels)
+    summary = normalize_notice(notice)
 
     time.sleep(REQUEST_INTERVAL_SECONDS)
     try:

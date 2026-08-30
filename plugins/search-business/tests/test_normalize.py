@@ -19,7 +19,11 @@ ITEM = {
 
 def test_codes_json_loads_and_has_sections():
     data = json.loads((SCRIPTS / "_ebid/codes.json").read_text(encoding="utf-8"))
-    for k in ("발주유형", "상태정확", "상태첫글자", "계약방법폴백", "지역", "제외필드", "딥링크메뉴"):
+    for k in ("발주유형", "상태정확", "상태첫글자", "계약방법", "지역", "제외필드", "딥링크메뉴"):
+        assert k in data
+    assert data["계약방법"] == {"CTA": "일반경쟁", "CTE": "지명경쟁", "CTH": "제한경쟁", "CTL": "전자수의"}
+    assert not hasattr(nz, "fetch_cpt_terms_labels")
+    for k in ():
         assert k in data
 
 
@@ -30,7 +34,7 @@ def test_no_inline_korean_dicts_in_python():
 
 
 def test_normalize_notice_keys_and_passthrough():
-    row = nz.normalize_notice(ITEM, {"CTA": "일반경쟁"})
+    row = nz.normalize_notice(ITEM)  # 라벨 인자 생략 = codes.json 정적 매핑
     assert row["발주유형"] == "용역"
     assert row["지역"] == "수도권본부" and row["지역코드"] == "0B"
     assert row["상태"] == "입찰완료" and row["공고일"] == "2025-07-02"

@@ -31,8 +31,7 @@ from typing import Any
 
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
-from _ebid.normalize import (fetch_cpt_terms_labels, normalize_notice, print_table,
-                             render_notice_markdown)
+from _ebid.normalize import normalize_notice, print_table, render_notice_markdown
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
@@ -84,8 +83,7 @@ def main(argv: list[str] | None = None) -> int:
     client = EbidClient(max_retries=MAX_RETRIES)
     rows: list[dict[str, Any]] = []
     try:
-        client.ensure_csrf_token()  # 세션·토큰은 스레드 시작 전에 확보
-        cpt_labels = fetch_cpt_terms_labels(client)
+        client.ensure_csrf_token()  # 세션·토큰은 스레드 시작 전에 확보 (없으면 403)
     except Exception as exc:
         report_error("검색 실패", exc)
         return 1
@@ -100,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
         if exc is not None:
             report_error(f"검색 실패({label})", exc)
             return 1
-        rows.extend(normalize_notice(it, cpt_labels) for it in items or [])
+        rows.extend(normalize_notice(it) for it in items or [])
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
     if args.md:

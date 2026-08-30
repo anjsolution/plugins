@@ -285,8 +285,9 @@ def _esc(v: Any) -> str:
 
 
 def _html_doc(title: str, meta: str, sections: list[str]) -> str:
-    return (f"<title>{_esc(title)}</title>\n{_HTML_STYLE}\n<h1>{_esc(title)}</h1>\n"
-            f"<p class=\"meta\">{_esc(meta)}</p>\n" + "\n".join(sections) + "\n")
+    t, m = _html.escape(title, quote=False), _html.escape(meta, quote=False)  # 본문 텍스트는 따옴표 보존
+    return (f"<title>{t}</title>\n{_HTML_STYLE}\n<h1>{t}</h1>\n"
+            f"<p class=\"meta\">{m}</p>\n" + "\n".join(sections) + "\n")
 
 
 def _html_table(headers: list[str], rows: list[list[str]], num_cols: set[int] = frozenset(),

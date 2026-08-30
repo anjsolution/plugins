@@ -196,6 +196,19 @@ https://ebid.ex.co.kr/default.do?menuId={menuId}&noti_id={noti_id}
   `noti_id` 누락 등은 전부 목록 화면(헤드리스 Chrome 6조합 실측, 2026-08-30).
 - 종전 `g2b=Y&part=C/S/I`·물품 `remicon` 은 화면이 읽지 않는다 → 제거(공사·물품 실클릭 확인). URL 194~204자 → 181자.
 
+### `g2b`·`part` 파라미터의 의미 (소스 확인 2026-08-30)
+
+- **화면 라우팅 플래그이지 데이터가 아니다.** 상세 화면 `es-sp-bid-noti-detail.html` `load()` 만 읽는다:
+  `param.g2b = data.g2b || "N"`, `param.part = data.part || ""`, 주석 `//g2b forward` 아래
+  `if (data.g2b == "Y") param.part = data.part` 후 `bidShared.load()`. 즉 **"G2B(나라장터)에서 넘어온 진입"** 표시.
+- `part` = 업무구분 C 공사(Construction) / S 용역(Service) / I 물품(Item) — `noti_cls` CT/SV/MT 와 1:1.
+- 딥링크 진입 시 컨테이너(`em-sp-bid-noti-*`)가 두 값을 상세로 넘기지 않아 항상 `N`/`""`. 서버 `findInfoBidShared.do` 에
+  `g2b=Y&part=C` 를 붙여도 **응답 동일**(실측).
+- **나라장터 게시 여부 필드는 공고 응답에 없다** — 목록 28개 키·상세 5섹션 전부에 g2b/nara/pps 류 필드 없음. 유일한 흔적은
+  계약 목록의 `g2b_snd_cpt_terms`(G2B 송신 계약방법 라벨)로, 계약 정보의 나라장터 송신 정황일 뿐 공고별 게시 여부가 아니다.
+  게시 여부가 필요하면 나라장터 쪽에서 공고번호·공고명으로 교차 확인해야 한다(→ `소스-접근성.md`, 미조사).
+- `g2b=Y` 링크의 출처(나라장터 상세의 자체조달시스템 링크 또는 알림 메일)는 **미확인**.
+
 - 개찰결과 화면은 menuId 끝 001→002 (공사 NPRO11002 / 용역 NPRO12002 / 물품 NPRO13002).
 - **default.do 를 쓰는 이유**: 알림 메일의 `appLogin.do?username=...` 방식은 SSO 로그인 엔드포인트라
   이미 로그인된 세션(타임아웃 30분)에서 재클릭하면 "로그인 실패"로 격회 실패한다. `default.do` 는

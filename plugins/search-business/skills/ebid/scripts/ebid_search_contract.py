@@ -15,7 +15,8 @@
   수의근거·설계금액/예정가격/개찰일시를 `상세` 키에 붙인다. 기본 상한 30건(--detail-limit).
 - 계약은 건별 웹 딥링크가 없다. 조회 화면 진입: https://ebid.ex.co.kr/default.do?menuId=NPRO20001
   필드 의미·검증 근거는 references/ebid-필드사전.md §계약공개현황.
-Exit: 0 성공 / 1 통신·응답 실패 / 2 인자·날짜 오류
+- 상세 실패 건은 `상세: null` + `상세오류: {종류, 메시지}` 로 남고, 일부 실패면 종료코드 3(전부 실패면 1).
+Exit: 0 성공 / 1 통신·응답 실패 / 2 인자·날짜 오류 / 3 상세 일부 실패
 """
 
 from __future__ import annotations
@@ -28,14 +29,12 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-import argparse
 import json
 import time
 from typing import Any
 
-import requests
-
 from _ebid.client import EbidClient
+from _ebid.errors import DATE_HINT, KoreanArgumentParser, describe_error, report_error
 from _ebid.contracts import (CONTRACT_PAGE_URL, DEFAULT_DETAIL_LIMIT, MAX_RETRIES,
                              fetch_contract_detail, search_contracts)
 from _ebid.normalize import (normalize_contract, normalize_contract_detail, print_table,
@@ -46,7 +45,7 @@ SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
+    parser = KoreanArgumentParser(
         description="ebid 계약공개현황 검색(수의·지명 포함 체결 원장). 입찰공고는 ebid_search_common.py")
     parser.add_argument("--keyword", default="", help="계약명에 포함될 검색어 (생략 시 기간 내 전체 — 이때 --from 필수)")
     parser.add_argument("--from", dest="date_from", help="체결일 시작 YYYYMMDD (생략 시 최근 1년)")
@@ -73,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         from_date, to_date = resolve_date_window(
             args.date_from, args.date_to, lookback_days=SEARCH_LOOKBACK_DAYS)
     except ValueError as exc:
-        print(f"[ebid] 날짜 형식 오류: {exc}", file=sys.stderr)
+        print(f"[ebid] 날짜 형식 오류 — {DATE_HINT} (입력: {str(exc).split(': ', 1)[-1]})", file=sys.stderr)
         return 2
     if from_date > to_date:
         print(f"[ebid] --from({from_date})이 --to({to_date})보다 이후입니다.", file=sys.stderr)
@@ -98,19 +97,15 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
             raw.extend(search_contracts(client, keyword=args.keyword or None, from_date=from_date,
                                         to_date=to_date, notice_class=cls))
-    except requests.exceptions.HTTPError as exc:
-        response = exc.response
-        status = response.status_code if response is not None else "?"
-        print(f"[ebid] 검색 실패: HTTP {status}", file=sys.stderr)
-        return 1
     except Exception as exc:
-        print(f"[ebid] 검색 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("검색 실패", exc)
         return 1
 
     raw.sort(key=lambda it: str(it.get("cntg_date") or ""), reverse=True)
     rows = [normalize_contract(it) for it in raw]
 
-    detail_failed = 0
+    detail_failed: list[tuple[str, str]] = []  # (계약번호, 종류)
+    detail_done = 0
     if args.detail:
         targets = list(zip(raw, rows))[:args.detail_limit]
         if len(rows) > args.detail_limit:
@@ -122,10 +117,14 @@ def main(argv: list[str] | None = None) -> int:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
             try:
                 row["상세"] = normalize_contract_detail(fetch_contract_detail(client, item))
-            except Exception as exc:  # 한 건 실패가 전체를 막지 않는다
-                detail_failed += 1
+                detail_done += 1
+            except Exception as exc:  # 한 건 실패가 전체를 막지 않는다 — 실패 종류·건은 결과에 남긴다
                 row["상세"] = None
-                print(f"[ebid] 상세 실패 ({row.get('계약번호')}): {type(exc).__name__}: {exc}", file=sys.stderr)
+                row["상세오류"] = describe_error(exc)
+                detail_failed.append((str(row.get("계약번호")), row["상세오류"]["종류"]))
+        if detail_failed:
+            print(f"[ebid] 상세 실패 {len(detail_failed)}건: "
+                  + ", ".join(f"{no}[{kind}]" for no, kind in detail_failed), file=sys.stderr)
 
     if args.md:
         period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
@@ -136,9 +135,10 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
     print(f"[ebid] keyword={args.keyword!r} types={args.types or '전체'} range={from_date}~{to_date} "
-          f"count={len(rows)} detail={'on' if args.detail else 'off'}"
-          f"{f' detail_failed={detail_failed}' if detail_failed else ''} page={CONTRACT_PAGE_URL}",
+          f"count={len(rows)} detail={'on' if args.detail else 'off'} page={CONTRACT_PAGE_URL}",
           file=sys.stderr)
+    if detail_failed:
+        return 3 if detail_done else 1
     return 0
 
 

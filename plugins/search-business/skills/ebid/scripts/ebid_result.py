@@ -7,7 +7,7 @@
     python <스킬폴더>/scripts/ebid_result.py --notice 202602664
     python <스킬폴더>/scripts/ebid_result.py --notice 202602664 --table
 
-Exit: 0 성공 / 1 통신 실패 / 2 공고 미발견
+Exit: 0 성공 / 1 통신 실패 / 2 공고 미발견·인자 오류
 """
 
 from __future__ import annotations
@@ -20,19 +20,17 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-import argparse
 import json
 import time
 from typing import Any
 
-import requests
-
 from _ebid.attachments import MAX_RETRIES, REQUEST_INTERVAL_SECONDS, resolve_notice
 from _ebid.client import EbidClient
+from _ebid.errors import NOTICE_NO_HINT, KoreanArgumentParser, is_notice_no, report_error
 from _ebid.normalize import fetch_cpt_terms_labels, fmt_dt, normalize_notice
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ebid 공고 상세·입찰결과 조회")
+    parser = KoreanArgumentParser(description="ebid 공고 상세·입찰결과 조회")
     parser.add_argument("--notice", required=True, help="공고번호 (예: 202602664)")
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 요약으로 출력")
     return parser.parse_args(argv)
@@ -82,11 +80,14 @@ def build_result(detail: dict[str, Any]) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if not is_notice_no(args.notice):
+        print(f"[ebid] 인자 오류: {NOTICE_NO_HINT} (입력: {args.notice!r})", file=sys.stderr)
+        return 2
     client = EbidClient(max_retries=MAX_RETRIES)
     try:
         notice = resolve_notice(client, args.notice)
     except Exception as exc:
-        print(f"[ebid] 공고 조회 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("공고 조회 실패", exc)
         return 1
     if notice is None:
         print(f"[ebid] 공고번호 {args.notice!r} 를 찾지 못했습니다 — 기간 제한 없이 "
@@ -103,13 +104,8 @@ def main(argv: list[str] | None = None) -> int:
             noti_no=notice["noti_no"], bid_no=notice["bid_no"],
             bid_rev=notice["bid_rev"], notice_class=notice["noti_cls"],
         )
-    except requests.exceptions.HTTPError as exc:
-        response = exc.response
-        status = response.status_code if response is not None else "?"
-        print(f"[ebid] 입찰결과 조회 실패: HTTP {status}", file=sys.stderr)
-        return 1
     except Exception as exc:
-        print(f"[ebid] 입찰결과 조회 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("입찰결과 조회 실패", exc)
         return 1
 
     detail_data = detail.get("detailData") or {}

@@ -5,6 +5,7 @@
     python <스킬폴더>/scripts/ebid_fetch.py --notice 202602663 --only 단가산출서 --out ./tmp
 
 --list 는 파일을 만들지 않는다. 다운로드는 --out 이 필수다(저장 위치를 호출자가 정한다).
+실패한 첨부는 결과 JSON `실패` 에 파일명·종류(network/http/server/file)·메시지로 남는다.
 Exit: 0 성공 / 1 통신·조회 실패 / 2 공고 미발견 또는 인자 오류 / 3 부분 성공
 """
 
@@ -18,7 +19,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-import argparse
 import json
 import time
 from typing import Any
@@ -26,9 +26,10 @@ from typing import Any
 from _ebid.attachments import (MAX_RETRIES, REQUEST_INTERVAL_SECONDS, download_one_attachment,
                                fetch_attachment_list, resolve_notice)
 from _ebid.client import EbidClient
+from _ebid.errors import NOTICE_NO_HINT, KoreanArgumentParser, is_notice_no, report_error
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ebid 공고 첨부파일 목록 조회·다운로드")
+    parser = KoreanArgumentParser(description="ebid 공고 첨부파일 목록 조회·다운로드")
     parser.add_argument("--notice", required=True, help="공고번호 (예: 202602663)")
     parser.add_argument("--out", help="저장 폴더 (다운로드 시 필수)")
     parser.add_argument("--list", dest="list_only", action="store_true",
@@ -44,12 +45,15 @@ def main(argv: list[str] | None = None) -> int:
     if not args.list_only and not args.out:
         print("[ebid] 다운로드에는 --out <폴더> 가 필요합니다. 목록만 보려면 --list.", file=sys.stderr)
         return 2
+    if not is_notice_no(args.notice):
+        print(f"[ebid] 인자 오류: {NOTICE_NO_HINT} (입력: {args.notice!r})", file=sys.stderr)
+        return 2
     client = EbidClient(max_retries=MAX_RETRIES)
 
     try:
         notice = resolve_notice(client, args.notice)
     except Exception as exc:
-        print(f"[ebid] 공고 조회 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("공고 조회 실패", exc)
         return 1
     if notice is None:
         print(f"[ebid] 공고번호 {args.notice!r} 를 찾지 못했습니다 — 기간 제한 없이 "
@@ -63,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         attachments, source = fetch_attachment_list(client, notice)
     except Exception as exc:
-        print(f"[ebid] 첨부 목록 조회 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("첨부 목록 조회 실패", exc)
         return 1
     print(f"[ebid] 첨부 {len(attachments)}건 (source={source})", file=sys.stderr)
 
@@ -93,7 +97,8 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(REQUEST_INTERVAL_SECONDS)
         result = download_one_attachment(
             client, attachment=attachment, notice_class=notice["noti_cls"], out_dir=out_dir)
-        note = result.get("error") or f"{result.get('size')}B"
+        note = (f"실패[{result.get('종류')}] {result['error']}" if result.get("error")
+                else f"{result.get('size')}B")
         print(f"[ebid]   - {result['filename']}: {note}", file=sys.stderr)
         results.append(result)
 
@@ -103,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
                       "저장폴더": str(out_dir), "저장": saved, "실패": failed},
                      ensure_ascii=False, indent=2))
     print(f"[ebid] 완료: {len(saved)}/{len(results)} 성공", file=sys.stderr)
+    if failed:
+        print("[ebid] 실패: " + ", ".join(f"{r['filename']}[{r.get('종류')}]" for r in failed), file=sys.stderr)
     if not failed:
         return 0
     if not saved:

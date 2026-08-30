@@ -67,3 +67,24 @@ def test_no_keyword_requires_from(tmp_path):
         r = run(script, "--to", "20260830", cwd=tmp_path)   # --to 만으로는 부족
         assert r.returncode == 2 and "--from" in r.stderr, script
         assert r.stdout == ""                                # 네트워크 호출 전에 멈춤
+
+
+def test_korean_argparse_messages(tmp_path):
+    r = run("ebid_search_common.py", "--keyword", "x", "--type", "계약", cwd=tmp_path)
+    assert r.returncode == 2 and "지원하지 않습니다" in r.stderr and "ebid_search_contract.py" in r.stderr
+    r = run("ebid_result.py", cwd=tmp_path)
+    assert r.returncode == 2 and "필수 인자가 빠졌습니다: --notice" in r.stderr
+    r = run("ebid_search_contract.py", "--keyword", "x", "--detail-limit", "abc", cwd=tmp_path)
+    assert r.returncode == 2 and "정수여야" in r.stderr
+
+
+def test_date_error_message_is_korean(tmp_path):
+    r = run("ebid_search_contract.py", "--keyword", "x", "--from", "20251301", cwd=tmp_path)
+    assert r.returncode == 2 and "YYYYMMDD" in r.stderr and "invalid ebid date" not in r.stderr
+
+
+def test_notice_number_prechecked_before_network(tmp_path):
+    for script in ("ebid_result.py", "ebid_fetch.py"):
+        r = run(script, "--notice", "abc", "--list", cwd=tmp_path) if script == "ebid_fetch.py" \
+            else run(script, "--notice", "abc", cwd=tmp_path)
+        assert r.returncode == 2 and "9자리" in r.stderr and r.stdout == "", script

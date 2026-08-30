@@ -39,6 +39,7 @@ skills/ebid/
 | 증상 | 원인·해결 |
 |---|---|
 | Codex 에서 `ProxyError … 127.0.0.1:9` 로 검색 실패, 웹 검색으로 대체됨 | Codex 샌드박스가 외부 네트워크를 막은 것. `codex -c 'sandbox_workspace_write.network_access=true'` 로 실행하거나 `~/.codex/config.toml` 에 같은 설정을 둔다 |
+| `ebid.ex.co.kr 에 연결하지 못했습니다 … [network]` | 네트워크·프록시·샌드박스 차단. 위 Codex 행 참고 |
 | `ModuleNotFoundError: requests` | `pip install -r requirements.txt` |
 | 딥링크를 열었는데 목록 화면만 뜸 | URL 이 중간에 잘린 것. 결과 JSON 의 `딥링크` 값을 통째로 복사 |
 | 계약 건 링크가 없음 | 계약공개현황 화면은 URL 파라미터를 읽지 않아 건별 링크가 원래 없음. `default.do?menuId=NPRO20001` 에서 계약명으로 조회 |

@@ -26,14 +26,12 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
 
-import argparse
 import json
 import time
 from typing import Any
 
-import requests
-
 from _ebid.client import EbidClient
+from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
 from _ebid.normalize import (fetch_cpt_terms_labels, normalize_notice, print_table,
                              render_notice_markdown)
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
@@ -43,7 +41,8 @@ MAX_RETRIES = 2
 SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="ebid 입찰공고 검색(공사·용역·물품). 계약공개현황은 ebid_search_contract.py")
+    parser = KoreanArgumentParser(description="ebid 입찰공고 검색(공사·용역·물품). 계약공개현황은 ebid_search_contract.py")
+    parser.HINTS = {"--type": "계약공개현황은 ebid_search_contract.py 를 쓰세요"}
     parser.add_argument("--keyword", default="", help="공고명에 포함될 검색어 (생략 시 기간 내 전체 — 이때 --from 필수)")
     parser.add_argument("--from", dest="date_from", help="시작일 YYYYMMDD (생략 시 최근 1년)")
     parser.add_argument("--to", dest="date_to", help="종료일 YYYYMMDD (생략 시 오늘)")
@@ -68,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         from_date, to_date = resolve_date_window(
             args.date_from, args.date_to, lookback_days=SEARCH_LOOKBACK_DAYS)
     except ValueError as exc:
-        print(f"[ebid] 날짜 형식 오류: {exc}", file=sys.stderr)
+        print(f"[ebid] 날짜 형식 오류 — {DATE_HINT} (입력: {str(exc).split(': ', 1)[-1]})", file=sys.stderr)
         return 2
     if from_date > to_date:
         print(f"[ebid] --from({from_date})이 --to({to_date})보다 이후입니다.", file=sys.stderr)
@@ -98,13 +97,8 @@ def main(argv: list[str] | None = None) -> int:
                 payload_overrides=overrides,
             )
             rows.extend(normalize_notice(it, cpt_labels) for it in items)
-    except requests.exceptions.HTTPError as exc:
-        response = exc.response
-        status = response.status_code if response is not None else "?"
-        print(f"[ebid] 검색 실패: HTTP {status}", file=sys.stderr)
-        return 1
     except Exception as exc:
-        print(f"[ebid] 검색 실패: {type(exc).__name__}: {exc}", file=sys.stderr)
+        report_error("검색 실패", exc)
         return 1
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)

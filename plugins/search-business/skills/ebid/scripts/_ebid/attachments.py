@@ -18,6 +18,7 @@ from typing import Any
 import requests
 
 from . import raonk
+from .errors import describe_error
 from .client import EbidClient
 from .search import ALL_NOTICE_CLASSES, STATUS_FILTER_OVERRIDE, resolve_date_window
 
@@ -134,7 +135,7 @@ def download_one_attachment(
         # 안 바꿀 이유가 없다). out_dir 밖 쓰기 방지는 오직 디스크 쓰기 경로에서만 필요하다.
         safe_name = safe_attachment_filename(raw_filename)
     except ValueError as exc:
-        return {"filename": raw_filename, "error": str(exc)}
+        return {"filename": raw_filename, "종류": "file", "error": str(exc)}
 
     try:
         content = raonk.fetch_attachment(
@@ -145,7 +146,8 @@ def download_one_attachment(
             notice_class=notice_class,
         )
     except (requests.exceptions.RequestException, raonk.RaonkError) as exc:
-        return {"filename": safe_name, "error": f"{type(exc).__name__}: {exc}"}
+        info = describe_error(exc)
+        return {"filename": safe_name, "종류": info["종류"], "error": info["메시지"]}
 
     kind = sniff_file_kind(content)
     expected_kind = _EXPECTED_SNIFF_BY_EXT.get(Path(safe_name).suffix.lower())
@@ -154,6 +156,7 @@ def download_one_attachment(
         # 있다 — 파일 확장자가 기대하는 시그니처가 아니면 디스크에 쓰지 않고 실패 처리한다.
         return {
             "filename": safe_name,
+            "종류": "server",
             "error": f"시그니처 불일치: 확장자={Path(safe_name).suffix!r} 기대={expected_kind!r} 실제={kind!r}",
             "content_preview": content[:200].decode("utf-8", errors="replace"),
         }
@@ -204,7 +207,8 @@ def fetch_attachment_list(client: EbidClient, notice: dict[str, Any]) -> tuple[l
             bid_nm=bid_nm, rmcn_yn=notice.get("rmcn_yn"),
         )
     except Exception as exc:
-        print(f"[ebid] 폴백 조회 실패(첨부 없음으로 계속): {type(exc).__name__}: {exc}",
+        info = describe_error(exc)
+        print(f"[ebid] 물품 첨부 대체 조회 실패 — 첨부 없음으로 계속: {info['메시지']} [{info['종류']}]",
               file=sys.stderr)
         return [], "findInfoBidShared"
     return detail.get("fileAttList") or [], "findInfoResultDetail"

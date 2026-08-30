@@ -1,0 +1,12 @@
+{
+  "name": "search-business",
+  "version": "0.1.0",
+  "description": "공공 발주 공고(한국도로공사 ebid) 검색·개찰결과·첨부 수집",
+  "author": { "name": "Ai-Ops", "email": "khchoi@anjsol.co.kr" },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "사업 공고 검색",
+    "shortDescription": "ebid 공고 검색·개찰·첨부",
+    "category": "Business & Operations"
+  }
+}

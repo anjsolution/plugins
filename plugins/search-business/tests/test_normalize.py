@@ -40,7 +40,10 @@ def test_normalize_notice_keys_and_passthrough():
     assert row["상태"] == "입찰완료" and row["공고일"] == "2025-07-02"
     assert row["계약방법"] == "일반경쟁"
     assert row["딥링크"].startswith("https://ebid.ex.co.kr/default.do?menuId=NPRO12001&noti_id=NID")
+    assert row["딥링크"].endswith("&noti_cont_id=CID&noti_no=202506507&bid_no=1&bid_rev=1")
+    assert "g2b" not in row["딥링크"] and "part=" not in row["딥링크"]
     assert "..." not in row["딥링크"]
+    assert nz.build_notice_deeplink({**ITEM, "noti_cont_id": None}) == ""   # 5개 필수 중 하나라도 없으면 링크 없음
     assert row["noti_view_cnt"] == 12          # passthrough
     assert "sys_id" not in row                 # 제외필드
 

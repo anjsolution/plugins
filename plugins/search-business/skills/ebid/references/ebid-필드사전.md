@@ -53,7 +53,7 @@ API 에 새 필드가 생기면 자동으로 노출된다. 제외는 전 건 상
 | `bid_rev` | ✔ 차수 | | |
 | `noti_view_cnt` | passthrough | 공고 조회수 — 시장 관심도 참고 지표 | distinct 159 |
 | `plrl_bid_cnt` | passthrough | 미해독 | 1×181, 2×2, 6×1 |
-| `rmcn_yn` | passthrough | 물품에만 존재 — 레미콘 여부 추정(딥링크 물품 URL 의 remicon 파라미터로 전달) | None×170, N×14 |
+| `rmcn_yn` | passthrough | 물품에만 존재 — 레미콘 여부 추정. 딥링크에는 불필요(화면이 읽지 않음) | None×170, N×14 |
 | `detl_cont_end_dt` | passthrough | 표본 전 건 null | |
 | `noti_id`, `noti_cont_id` | passthrough | 내부 UUID — **딥링크 조립 재료** (아래 §딥링크) | |
 | (조립) | ✔ 딥링크 | default.do 공고 상세 진입 URL | 아래 §딥링크 |
@@ -184,13 +184,17 @@ API 에 새 필드가 생기면 자동으로 노출된다. 제외는 전 건 상
 
 ## 딥링크 — 공고 상세 웹 URL 조립
 
-`_ebid/normalize.py build_notice_deeplink()` 가 구현체. 메뉴 ID·part 는 `codes.json` 의 `딥링크메뉴`.
+`_ebid/normalize.py build_notice_deeplink()` 가 구현체. 메뉴 ID 는 `codes.json` 의 `딥링크메뉴`.
 
 ```
 https://ebid.ex.co.kr/default.do?menuId={menuId}&noti_id={noti_id}
-  &noti_cont_id={noti_cont_id}&noti_no={noti_no}&bid_no={bid_no}
-  &bid_rev={bid_rev}&g2b=Y&part={part}     (+물품이면 &remicon={rmcn_yn})
+  &noti_cont_id={noti_cont_id}&noti_no={noti_no}&bid_no={bid_no}&bid_rev={bid_rev}
 ```
+
+- **5개 파라미터 전부 필수** — 화면 소스(`em-sp-bid-noti-ct/sv/mt.html` `initialized`)가
+  `noti_id && noti_cont_id && noti_no && bid_no && bid_rev` 일 때만 `onShowDetail` 을 부른다. 2개(UUID)만·
+  `noti_id` 누락 등은 전부 목록 화면(헤드리스 Chrome 6조합 실측, 2026-08-30).
+- 종전 `g2b=Y&part=C/S/I`·물품 `remicon` 은 화면이 읽지 않는다 → 제거(공사·물품 실클릭 확인). URL 194~204자 → 181자.
 
 - 개찰결과 화면은 menuId 끝 001→002 (공사 NPRO11002 / 용역 NPRO12002 / 물품 NPRO13002).
 - **default.do 를 쓰는 이유**: 알림 메일의 `appLogin.do?username=...` 방식은 SSO 로그인 엔드포인트라
@@ -202,5 +206,3 @@ https://ebid.ex.co.kr/default.do?menuId={menuId}&noti_id={noti_id}
 - **파라미터가 깨지면 조용히 목록 화면으로 떨어진다**: UUID 가 잘리거나 틀리면 오류 없이 "입찰공고
   목록" 화면이 뜬다(답변에 URL 을 `f5291ec3-...` 처럼 중간 축약해 보여준 것을 클릭해 발생한 실측).
   **딥링크는 항상 전체 URL 그대로 안내하고, 절대 중간을 `...` 로 줄여 표시하지 않는다.**
-- **remicon 파라미터**: 물품에만 `rmcn_yn` 값을 전달. 파라미터명·필수 여부는 미실측 — 물품 링크
-  오동작 시 1순위 점검 대상.

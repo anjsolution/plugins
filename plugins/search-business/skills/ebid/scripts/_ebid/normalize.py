@@ -20,22 +20,19 @@ PROG_STS_BY_INITIAL: dict[str, str] = CODES["상태첫글자"]
 CPT_TERMS_LABELS: dict[str, str] = CODES["계약방법"]
 AREA_LABELS: dict[str, str] = CODES["지역"]
 NOTICE_CONSTANT_FIELDS: set[str] = set(CODES["제외필드"])
-DEEPLINK_MENU: dict[str, tuple[str, str]] = {k: tuple(v) for k, v in CODES["딥링크메뉴"].items()}
+DEEPLINK_MENU: dict[str, str] = CODES["딥링크메뉴"]
 
 
 def build_notice_deeplink(item: dict[str, Any]) -> str:
-    menu = DEEPLINK_MENU.get(item.get("noti_cls") or "")
-    if not menu or not item.get("noti_id"):
+    """공고 화면(em-sp-bid-noti-*)이 상세로 직행하는 조건은 noti_id·noti_cont_id·noti_no·bid_no·bid_rev
+    5개 전부 — 하나라도 빠지면 조용히 목록 화면. g2b/part/remicon 은 화면이 읽지 않아 뺐다(2026-08-30 실측)."""
+    menu_id = DEEPLINK_MENU.get(item.get("noti_cls") or "")
+    if not menu_id or not item.get("noti_id") or not item.get("noti_cont_id"):
         return ""
-    menu_id, part = menu
-    url = (f"{BASE_URL}/default.do?menuId={menu_id}"
-           f"&noti_id={item.get('noti_id')}&noti_cont_id={item.get('noti_cont_id')}"
-           f"&noti_no={item.get('noti_no')}&bid_no={item.get('bid_no') or 1}"
-           f"&bid_rev={item.get('bid_rev') or 1}&g2b=Y&part={part}")
-    if item.get("noti_cls") == "MT":
-        # 물품은 biz-renewal URL 빌더가 remicon 파라미터를 추가한다(rmcn_yn 전달, 미실측)
-        url += f"&remicon={item.get('rmcn_yn') or 'N'}"
-    return url
+    return (f"{BASE_URL}/default.do?menuId={menu_id}"
+            f"&noti_id={item.get('noti_id')}&noti_cont_id={item.get('noti_cont_id')}"
+            f"&noti_no={item.get('noti_no')}&bid_no={item.get('bid_no') or 1}"
+            f"&bid_rev={item.get('bid_rev') or 1}")
 
 def prog_sts_label(code: str | None) -> str:
     if not code:

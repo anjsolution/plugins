@@ -71,7 +71,7 @@ def test_no_keyword_requires_from(tmp_path):
 
 def test_korean_argparse_messages(tmp_path):
     r = run("ebid_search_common.py", "--keyword", "x", "--type", "계약", cwd=tmp_path)
-    assert r.returncode == 2 and "지원하지 않습니다" in r.stderr and "ebid_search_contract.py" in r.stderr
+    assert r.returncode == 2 and "지원하지 않습니다" in r.stderr and "공사, 용역, 물품" in r.stderr
     r = run("ebid_result.py", cwd=tmp_path)
     assert r.returncode == 2 and "필수 인자가 빠졌습니다: --notice" in r.stderr
     r = run("ebid_search_contract.py", "--keyword", "x", "--detail-limit", "abc", cwd=tmp_path)

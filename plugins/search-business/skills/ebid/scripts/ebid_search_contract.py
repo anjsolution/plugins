@@ -30,7 +30,6 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import json
-import time
 from typing import Any
 
 from _ebid.client import EbidClient
@@ -39,7 +38,8 @@ from _ebid.contracts import (CONTRACT_PAGE_URL, DEFAULT_DETAIL_LIMIT, MAX_RETRIE
                              fetch_contract_detail, search_contracts)
 from _ebid.normalize import (normalize_contract, normalize_contract_detail, print_table,
                              render_contract_markdown)
-from _ebid.search import NOTICE_CLASS_LABELS, REQUEST_INTERVAL_SECONDS, resolve_date_window
+from _ebid.parallel import map_parallel
+from _ebid.search import NOTICE_CLASS_LABELS, resolve_date_window
 
 SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 
@@ -92,14 +92,17 @@ def main(argv: list[str] | None = None) -> int:
     classes = [NOTICE_CLASS_LABELS[t] for t in args.types] if args.types else [None]
     raw: list[dict[str, Any]] = []
     try:
-        for i, cls in enumerate(classes):
-            if i > 0:
-                time.sleep(REQUEST_INTERVAL_SECONDS)
-            raw.extend(search_contracts(client, keyword=args.keyword or None, from_date=from_date,
-                                        to_date=to_date, notice_class=cls))
+        client.ensure_csrf_token()  # 세션·토큰은 스레드 시작 전에 확보
     except Exception as exc:
         report_error("검색 실패", exc)
         return 1
+    for cls, (items, exc) in zip(classes, map_parallel(
+            lambda c: search_contracts(client, keyword=args.keyword or None, from_date=from_date,
+                                       to_date=to_date, notice_class=c), classes)):
+        if exc is not None:
+            report_error(f"검색 실패({cls or '전체'})", exc)
+            return 1
+        raw.extend(items or [])
 
     raw.sort(key=lambda it: str(it.get("cntg_date") or ""), reverse=True)
     rows = [normalize_contract(it) for it in raw]
@@ -112,13 +115,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"[ebid] --detail 상한 {args.detail_limit}건 적용 — 전체 {len(rows)}건 중 체결일 최신순 "
                   f"{args.detail_limit}건만 상세 조회. 더 필요하면 --detail-limit 을 올리거나 기간을 좁힐 것",
                   file=sys.stderr)
-        for i, (item, row) in enumerate(targets):
-            if i > 0:
-                time.sleep(REQUEST_INTERVAL_SECONDS)
-            try:
-                row["상세"] = normalize_contract_detail(fetch_contract_detail(client, item))
+        results = map_parallel(lambda it: fetch_contract_detail(client, it), [it for it, _ in targets])
+        for (item, row), (detail, exc) in zip(targets, results):  # 건별 동시 조회(상한 MAX_CONCURRENCY)
+            if exc is None:
+                row["상세"] = normalize_contract_detail(detail)
                 detail_done += 1
-            except Exception as exc:  # 한 건 실패가 전체를 막지 않는다 — 실패 종류·건은 결과에 남긴다
+            else:  # 한 건 실패가 전체를 막지 않는다 — 실패 종류·건은 결과에 남긴다
                 row["상세"] = None
                 row["상세오류"] = describe_error(exc)
                 detail_failed.append((str(row.get("계약번호")), row["상세오류"]["종류"]))

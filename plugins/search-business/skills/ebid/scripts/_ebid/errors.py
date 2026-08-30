@@ -57,8 +57,6 @@ def is_notice_no(value: Any) -> bool:
 class KoreanArgumentParser(argparse.ArgumentParser):
     """argparse 의 영어 오류 메시지를 한글로 바꾼다 (종료코드 2 유지)."""
 
-    HINTS: dict[str, str] = {}  # 옵션별 추가 안내 — 예: {"--type": "계약은 ebid_search_contract.py 를 쓰세요"}
-
     def error(self, message: str) -> None:  # type: ignore[override]
         m = re.match(r"the following arguments are required: (.+)", message)
         if m:
@@ -68,9 +66,6 @@ class KoreanArgumentParser(argparse.ArgumentParser):
             if m:
                 opt, bad, choices = m.groups()
                 text = f"{opt} 값 '{bad}' 은 지원하지 않습니다 (가능: {choices.replace(chr(39), '')})"
-                hint = self.HINTS.get(opt)
-                if hint:
-                    text += f". {hint}"
             else:
                 m = re.match(r"argument (\S+): invalid int value: '(.+)'", message)
                 if m:

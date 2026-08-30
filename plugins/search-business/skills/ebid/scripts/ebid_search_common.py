@@ -27,22 +27,20 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import json
-import time
 from typing import Any
 
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
 from _ebid.normalize import (fetch_cpt_terms_labels, normalize_notice, print_table,
                              render_notice_markdown)
+from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
-REQUEST_INTERVAL_SECONDS = 1.0
 MAX_RETRIES = 2
 SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = KoreanArgumentParser(description="ebid 입찰공고 검색(공사·용역·물품). 계약공개현황은 ebid_search_contract.py")
-    parser.HINTS = {"--type": "계약공개현황은 ebid_search_contract.py 를 쓰세요"}
     parser.add_argument("--keyword", default="", help="공고명에 포함될 검색어 (생략 시 기간 내 전체 — 이때 --from 필수)")
     parser.add_argument("--from", dest="date_from", help="시작일 YYYYMMDD (생략 시 최근 1년)")
     parser.add_argument("--to", dest="date_to", help="종료일 YYYYMMDD (생략 시 오늘)")
@@ -86,20 +84,23 @@ def main(argv: list[str] | None = None) -> int:
     client = EbidClient(max_retries=MAX_RETRIES)
     rows: list[dict[str, Any]] = []
     try:
+        client.ensure_csrf_token()  # 세션·토큰은 스레드 시작 전에 확보
         cpt_labels = fetch_cpt_terms_labels(client)
-        for i, label in enumerate(args.types):
-            if i > 0:
-                time.sleep(REQUEST_INTERVAL_SECONDS)
-            items, _st, _url = client.fetch_bid_notice_list(
-                notice_class=NOTICE_CLASS_LABELS[label],
-                from_noti_date=from_date,
-                to_noti_date=to_date,
-                payload_overrides=overrides,
-            )
-            rows.extend(normalize_notice(it, cpt_labels) for it in items)
     except Exception as exc:
         report_error("검색 실패", exc)
         return 1
+
+    def fetch(label: str) -> list[dict[str, Any]]:
+        items, _st, _url = client.fetch_bid_notice_list(
+            notice_class=NOTICE_CLASS_LABELS[label], from_noti_date=from_date,
+            to_noti_date=to_date, payload_overrides=overrides)
+        return items
+
+    for label, (items, exc) in zip(args.types, map_parallel(fetch, args.types)):  # 유형별 동시 조회
+        if exc is not None:
+            report_error(f"검색 실패({label})", exc)
+            return 1
+        rows.extend(normalize_notice(it, cpt_labels) for it in items or [])
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
     if args.md:

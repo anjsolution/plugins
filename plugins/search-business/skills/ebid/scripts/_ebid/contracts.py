@@ -41,15 +41,20 @@ def _post_json(client: EbidClient, path: str, body: dict[str, Any]) -> Any:
 
 
 def search_contracts(
-    client: EbidClient, *, keyword: str, from_date: str, to_date: str,
+    client: EbidClient, *, keyword: str | None, from_date: str, to_date: str,
     notice_class: str | None = None,
 ) -> list[dict[str, Any]]:
     """계약명 부분일치 + 체결일 범위 검색. notice_class(CT/SV/MT)는 서버 `gubun` 필터.
 
+    keyword 가 없으면 `cntr_nm` 을 본문에서 빼고 보낸다(기간 내 전체). 화면과 같은 동작이며
+    빈 문자열을 보낸 것과 결과가 같다(실측 2026-08-30, 1개월 343건).
+
     화면(`es-sp-cntr-open-list`)이 보내는 검색 파라미터: cntr_nm · from/to_yyyymmdd · gubun(발주유형)
     · method(계약방법 CTA/CTE/CTH/CTL) · stl_noti_no(계약번호 정확일치). 실측 2026-08-30.
     """
-    body: dict[str, Any] = {"cntr_nm": keyword, "from_yyyymmdd": from_date, "to_yyyymmdd": to_date}
+    body: dict[str, Any] = {"from_yyyymmdd": from_date, "to_yyyymmdd": to_date}
+    if keyword:
+        body["cntr_nm"] = keyword
     if notice_class:
         body["gubun"] = notice_class
     data = _post_json(client, LIST_ENDPOINT, body)

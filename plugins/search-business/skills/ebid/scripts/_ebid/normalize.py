@@ -219,7 +219,15 @@ def _amount(value: Any) -> str:
 
 
 def _table_title(label: str, keyword: str, period_label: str, n: int) -> str:
+    if not keyword:
+        what = "전체 계약" if label == "계약" else "전체 공고"
+        return f"### [{label}] {what} ({period_label}, {n}건)\n"
     return f"### [{label}] '{keyword}' 검색 결과 ({period_label}, {n}건)\n"
+
+
+def _empty_line(keyword: str, period_label: str) -> str:
+    return (f"'{keyword}' 검색 결과 없음 ({period_label})." if keyword
+            else f"검색 결과 없음 ({period_label}, 키워드 없음).")
 
 
 def render_notice_markdown(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
@@ -239,7 +247,7 @@ def render_notice_markdown(rows: list[dict[str, Any]], *, keyword: str, period_l
                        f" | {_md_escape(r.get('계약방법'))} | {r.get('공고일')} | {_md_escape(r.get('상태'))} |")
         out.append("")
     if not out:
-        out.append(f"'{keyword}' 검색 결과 없음 ({period_label}).")
+        out.append(_empty_line(keyword, period_label))
     return "\n".join(out).rstrip() + "\n"
 
 
@@ -247,7 +255,7 @@ def render_contract_markdown(rows: list[dict[str, Any]], *, keyword: str, period
                              detail: bool = False) -> str:
     """계약공개현황 검색 결과 → 단일 표. detail=True 면 `상세` 키의 항목을 열로 덧붙인다."""
     if not rows:
-        return f"'{keyword}' 검색 결과 없음 ({period_label}).\n"
+        return _empty_line(keyword, period_label) + "\n"
     out = [_table_title("계약", keyword, period_label, len(rows))]
     if detail:
         out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 계약업체 | 대표자 | 총계약금액 | 예정가격 | 체결일"

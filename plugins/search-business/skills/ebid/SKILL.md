@@ -17,6 +17,7 @@ description: 한국도로공사 전자조달(ebid.ex.co.kr) 입찰공고 검색,
 python scripts/ebid_search_common.py   --keyword "구내통신" --md                    # 입찰공고 검색 (공사·용역·물품)
 python scripts/ebid_search_contract.py --keyword "터널" --from 20240101 --md        # 계약공개현황 검색
 python scripts/ebid_search_contract.py --keyword "VMS" --type 용역 --detail --md    # 계약 + 건별 상세(담당자·업체·수의근거)
+python scripts/ebid_search_common.py   --from 20260815 --type 용역 --md              # 키워드 없이 최근 공고 전체 (기간 필수)
 python scripts/ebid_result.py --notice 202602664 --table                          # 공고 상세·개찰결과
 python scripts/ebid_fetch.py  --notice 202602663 --list                           # 첨부 목록 (파일 안 만듦)
 python scripts/ebid_fetch.py  --notice 202602663 --only 단가 --out "./(202602663)공고명"
@@ -31,6 +32,7 @@ python scripts/ebid_fetch.py  --notice 202602663 --only 단가 --out "./(2026026
 - 공고 검색에서 계약 필드를 언급하지 않는다. 계약 검색에서 공고 상태(공고중·입찰완료)를 추정하지 않는다.
 
 ## 검색 규칙 (공통)
+- **키워드 없이 검색**("요즘 뭐 나왔어", "최근 계약 전부")할 때는 `--keyword` 를 생략하되 **반드시 `--from`(필요하면 `--to`)으로 기간을 좁힌다** — 스크립트는 건수를 제한하지 않으며 기본 1년이면 공고 수천 건·계약 4천 건 안팎이 쏟아진다. 기준: 2주~1개월(계약 1개월 ≈ 350건, 공고 3유형 1개월 ≈ 130건). 발주유형이 정해져 있으면 `--type` 도 함께 준다. 답변에는 적용한 기간을 밝힌다.
 - 기간 미지정 = 최근 1년. 답변에 "오늘 기준 최근 1년치 결과이며 기간을 늘려 검색할 수 있다"고 안내한다.
 - 과거 이력·지난 사업을 묻는 질문이면 되묻지 말고 질문에 맞는 범위로 `--from` 을 지정하고, 적용한 범위를 답변에 쓴다.
 - 두 지명이 합쳐진 노선명("함양울산")은 지명별("함양", "울산")로 따로 검색해 교차 확인한다 — 연속 문자열 부분일치라 표기 변형을 놓친다.

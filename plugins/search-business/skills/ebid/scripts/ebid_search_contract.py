@@ -6,8 +6,11 @@
     python <스킬폴더>/scripts/ebid_search_contract.py --keyword "터널관리" --from 20190101
     python <스킬폴더>/scripts/ebid_search_contract.py --keyword "터널" --type 용역 --md
     python <스킬폴더>/scripts/ebid_search_contract.py --keyword "VMS" --detail --md   # 건별 상세까지
+    python <스킬폴더>/scripts/ebid_search_contract.py --from 20260815 --type 용역 --md  # 키워드 없이 최근 계약 전체
 
 - 기간 미지정 시 최근 1년(체결일 기준).
+- --keyword 생략 시 검색어 없이 기간 내 전체를 가져온다(요청 본문에서 cntr_nm 제외). 건수 제한은 두지
+  않으므로 호출 측이 --from/--to 로 기간을 좁혀야 한다(SKILL.md 검색 규칙).
 - --detail: 건마다 상세 API 를 1회 더 호출해 계약기간·발주처·담당자/연락처·낙찰업체 대표/주소/지분·
   수의근거·설계금액/예정가격/개찰일시를 `상세` 키에 붙인다. 기본 상한 30건(--detail-limit).
 - 계약은 건별 웹 딥링크가 없다. 조회 화면 진입: https://ebid.ex.co.kr/default.do?menuId=NPRO20001
@@ -45,7 +48,7 @@ SEARCH_LOOKBACK_DAYS = 365  # 대화형 검색 기본 폭 — 최근 1년
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="ebid 계약공개현황 검색(수의·지명 포함 체결 원장). 입찰공고는 ebid_search_common.py")
-    parser.add_argument("--keyword", required=True, help="계약명에 포함될 검색어")
+    parser.add_argument("--keyword", default="", help="계약명에 포함될 검색어 (생략 시 기간 내 전체 — 반드시 --from/--to 로 기간을 좁힐 것)")
     parser.add_argument("--from", dest="date_from", help="체결일 시작 YYYYMMDD (생략 시 최근 1년)")
     parser.add_argument("--to", dest="date_to", help="체결일 종료 YYYYMMDD (생략 시 오늘)")
     parser.add_argument("--type", dest="types", nargs="+", choices=["공사", "용역", "물품"],
@@ -79,6 +82,9 @@ def main(argv: list[str] | None = None) -> int:
               f"답변에 이 범위를 안내할 것 — 이력·과거 사업 질의면 --from 으로 범위를 넓혀 재검색",
               file=sys.stderr)
 
+    if not args.keyword:
+        print(f"[ebid] 키워드 없음 → {from_date}~{to_date} 기간 내 전체 계약. 건수가 많으면 --from/--to 를 좁힐 것",
+              file=sys.stderr)
     client = EbidClient(max_retries=MAX_RETRIES)
     classes = [NOTICE_CLASS_LABELS[t] for t in args.types] if args.types else [None]
     raw: list[dict[str, Any]] = []
@@ -86,7 +92,7 @@ def main(argv: list[str] | None = None) -> int:
         for i, cls in enumerate(classes):
             if i > 0:
                 time.sleep(REQUEST_INTERVAL_SECONDS)
-            raw.extend(search_contracts(client, keyword=args.keyword, from_date=from_date,
+            raw.extend(search_contracts(client, keyword=args.keyword or None, from_date=from_date,
                                         to_date=to_date, notice_class=cls))
     except requests.exceptions.HTTPError as exc:
         response = exc.response

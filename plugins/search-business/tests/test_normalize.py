@@ -145,3 +145,24 @@ def test_biz_no_format():
     assert nz._biz_no("1148164393") == "114-81-64393"
     assert nz._biz_no("") == "-"
     assert nz._biz_no("12345") == "12345"
+
+
+def test_render_titles_without_keyword():
+    n = nz.normalize_notice(ITEM, {"CTA": "일반경쟁"})
+    c = nz.normalize_contract(CONTRACT)
+    assert "### [용역] 전체 공고 (2026-08-01~2026-08-30, 1건)" in nz.render_notice_markdown(
+        [n], keyword="", period_label="2026-08-01~2026-08-30")
+    assert "### [계약] 전체 계약 (2026-08-01~2026-08-30, 1건)" in nz.render_contract_markdown(
+        [c], keyword="", period_label="2026-08-01~2026-08-30")
+    assert "검색 결과 없음" in nz.render_notice_markdown([], keyword="", period_label="1년")
+
+
+def test_search_contracts_omits_cntr_nm_when_no_keyword(monkeypatch):
+    from _ebid import contracts
+    sent = {}
+    monkeypatch.setattr(contracts, "_post_json", lambda client, path, body: sent.update(body) or [])
+    contracts.search_contracts(None, keyword=None, from_date="20260801", to_date="20260830")
+    assert "cntr_nm" not in sent
+    sent.clear()
+    contracts.search_contracts(None, keyword="터널", from_date="20260801", to_date="20260830", notice_class="SV")
+    assert sent["cntr_nm"] == "터널" and sent["gubun"] == "SV"

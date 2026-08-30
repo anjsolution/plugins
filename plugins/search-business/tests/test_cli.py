@@ -49,3 +49,12 @@ def test_fetch_without_out_or_list_exit_2(tmp_path):
 def test_result_docstring_has_no_from_to():
     src = (SCRIPTS / "ebid_result.py").read_text(encoding="utf-8")
     assert "--from" not in src.split('"""')[1]
+
+
+def test_keyword_optional_on_both_search_clis(tmp_path):
+    # 키워드 없이도 인자 단계는 통과해야 한다 — 날짜 오류(2)로 멈추게 해 네트워크를 안 탄다
+    for script in ("ebid_search_common.py", "ebid_search_contract.py"):
+        r = run(script, "--from", "20251301", cwd=tmp_path)
+        assert r.returncode == 2 and "날짜" in r.stderr, script
+        h = run(script, "--help", cwd=tmp_path).stdout
+        assert "--keyword" in h and "required" not in h.split("--keyword")[1].split("--")[0]

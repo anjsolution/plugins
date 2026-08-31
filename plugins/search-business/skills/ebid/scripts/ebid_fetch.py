@@ -70,9 +70,9 @@ def write_manifest(out_dir: Path, notices: list[dict[str, Any]]) -> Path:
         for f in n["저장"]:
             lines.append(f"  - {f['filename']} — {int(f.get('size') or 0):,}B")
         for f in n.get("건너뜀", []):
-            lines.append(f"  - ⏭ {f['filename']} — {int(f.get('size') or 0):,}B ({f.get('사유')})")
+            lines.append(f"  - (건너뜀) {f['filename']} — {int(f.get('size') or 0):,}B ({f.get('사유')})")
         for f in n["실패"]:
-            lines.append(f"  - ❌ {f['filename']} — [{f.get('종류')}] {f.get('error')}")
+            lines.append(f"  - (실패) {f['filename']} — [{f.get('종류')}] {f.get('error')}")
         lines.append("")
     path = out_dir / MANIFEST_NAME
     path.write_text("\n".join(lines), encoding="utf-8")

@@ -13,6 +13,23 @@ codex plugin add search-business@anjsolution        # Codex
 Python 3.10+ 와 `pip install -r requirements.txt` (requests) 가 필요합니다.
 hwp/hwpx/pdf 첨부를 읽으려면 문서 스킬(kordoc 등)을 함께 설치하세요.
 
+### Codex 는 네트워크 허용 설정이 필수입니다
+
+Codex 샌드박스(`workspace-write`)는 **기본값이 외부 네트워크 차단**이라, 설정 없이는 ebid 호출이
+전부 실패합니다. `~/.codex/config.toml` 에 다음을 넣으세요.
+
+```toml
+[sandbox_workspace_write]
+network_access = true
+```
+
+일회성으로 실행할 때는 `codex -c 'sandbox_workspace_write.network_access=true'`.
+
+같은 샌드박스가 **쓰기도 워크스페이스(와 `/tmp`) 안으로 제한**합니다. 그래서 이 플러그인은 결과
+파일을 항상 **현재 작업 폴더 밑 `ebid-out/`** 에 만들고 절대경로·임시폴더는 쓰지 않습니다.
+`.gitignore` 에 `ebid-out/` 한 줄을 넣어두면 깔끔합니다. (기본값은 *저장하지 않음* 이라,
+파일은 결과가 많거나 직접 요청했을 때만 생깁니다.)
+
 ## 할 수 있는 것
 
 | 질문 | 도구 |

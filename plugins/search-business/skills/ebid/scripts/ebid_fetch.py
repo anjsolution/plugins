@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
     per_notice: dict[str, dict[str, Any]] = {
         n["noti_no"]: {"공고번호": n["noti_no"], "공고명": n.get("noti_nm"),
-                       "저장폴더": str(folders[n["noti_no"]]), "저장": [], "건너뜀": [], "실패": []}
+                       "저장폴더": str(folders[n["noti_no"]].resolve()), "저장": [], "건너뜀": [], "실패": []}
         for n, _ in found}
     for (notice, attachment), (result, exc) in zip(jobs, results):
         entry = per_notice[notice["noti_no"]]
@@ -186,7 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     manifest = write_manifest(out_dir, notices)
     saved = sum(len(n["저장"]) for n in notices)
     failed = sum(len(n["실패"]) for n in notices)
-    print(json.dumps({"받은위치": str(out_dir), "받은목록": str(manifest),
+    # 경로는 절대경로로 낸다 — 호출자가 이 값으로 링크를 만들기 때문에 상대경로면 링크가 깨진다.
+    print(json.dumps({"받은위치": str(out_dir.resolve()), "받은목록": str(manifest.resolve()),
                       "공고": notices, "미발견": missing,
                       "합계": {"공고": len(notices), "성공": saved,
                              "건너뜀": len(skipped), "실패": failed}},

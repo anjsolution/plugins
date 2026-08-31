@@ -269,3 +269,13 @@ def test_existing_download_without_expected_size(tmp_path):
     (tmp_path / "공고문.hwp").write_bytes(b"x")
     done = existing_download(att, tmp_path)
     assert done is not None and "크기 미확인" in done["사유"]
+
+
+def test_file_url_makes_relative_paths_absolute(tmp_path, monkeypatch):
+    """상대경로를 그대로 붙이면 file:///ebid-out/... 같은 엉뚱한 URL 이 나온다 — 실제로 겪은 사고."""
+    monkeypatch.chdir(tmp_path)
+    url = nz.file_url("./ebid-out/x.md")
+    assert url.startswith("file:///")
+    assert "file:///ebid-out/" not in url          # 상대경로가 그대로 새어나오지 않는다
+    assert url.endswith("/ebid-out/x.md")
+    assert str(tmp_path).replace("\\", "/").lstrip("/") in url

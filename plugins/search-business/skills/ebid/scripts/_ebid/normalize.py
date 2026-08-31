@@ -375,8 +375,17 @@ def write_output(text: str, out_path: str | None) -> None:
 
 
 def file_url(path: Any) -> str:
-    """로컬 경로 → `file:///` URL. Windows 역슬래시를 `/` 로 바꾸고 드라이브 문자는 유지한다."""
-    return "file:///" + str(path).replace("\\", "/").lstrip("/")
+    """로컬 경로 → `file:///` URL.
+
+    **먼저 절대경로로 만든다.** 상대경로(`./ebid-out/x.md`)를 그대로 붙이면
+    `file:///ebid-out/x.md` 라는 엉뚱한 절대 URL 이 되어 링크가 열리지 않는다 —
+    CLI 기본값이 `./ebid-out` 이라 실제로 매니페스트에서 이 사고가 났었다.
+    Windows 역슬래시는 `/` 로 바꾸고, UNC(`\\\\server\\share`)는 호스트를 살려 `file://server/share` 로 둔다.
+    """
+    text = str(Path(path).resolve()).replace("\\", "/")
+    if text.startswith("//"):          # UNC — 슬래시 두 개가 호스트 구분자다
+        return "file:" + text
+    return "file:///" + text.lstrip("/")
 
 
 def md_file_link(label: Any, path: Any) -> str:

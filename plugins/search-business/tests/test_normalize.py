@@ -233,12 +233,16 @@ def test_pick_workers_by_average_size():
     assert pick_workers([]) == 1
 
 
-def test_md_file_link_wraps_url_in_angle_brackets():
-    """폴더명에 괄호·공백이 흔해서 <> 로 감싸지 않으면 첫 ')' 에서 링크가 끊긴다."""
+def test_md_file_link_encodes_parens_only():
+    """<> 로 감싸면 앱이 못 열고, 괄호를 남기면 짝이 안 맞을 때 경로가 틀어진다 — 둘 다 실측."""
     link = nz.md_file_link("(202605940)[긴급]VMS 공사", r"C:\out\(202605940)[긴급]VMS 공사")
-    assert link.startswith(r"[(202605940)\[긴급\]VMS 공사](<file:///C:/out/")
-    assert link.endswith(">)")
-    assert "\\" not in nz.file_url(r"C:\a\b")   # 역슬래시가 남지 않는다
+    assert "(<file:///" not in link and ">)" not in link      # 감싸지 않는다
+    assert link == r"[(202605940)\[긴급\]VMS 공사](file:///C:/out/%28202605940%29[긴급]VMS 공사)"
+
+    # 짝이 안 맞는 괄호도 링크가 끊기지 않는다
+    bad = nz.md_file_link("불균형(테스트", r"C:\out\불균형(테스트\a.md")
+    assert "(" not in bad.split("](", 1)[1] and ")" == bad[-1]
+    assert "\\" not in nz.file_url(r"C:\a\b")             # 역슬래시가 남지 않는다
 
 
 def test_existing_download_matches_name_and_size(tmp_path):

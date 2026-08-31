@@ -17,3 +17,6 @@ CLAUDE.local.md
 # Python 아티팩트
 __pycache__/
 *.pyc
+
+# ebid 검색 결과 출력 폴더 (스킬이 생성)
+ebid-out/

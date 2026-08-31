@@ -372,3 +372,19 @@ def write_output(text: str, out_path: str | None) -> None:
         print(f"[ebid] 저장: {p.resolve()}", file=sys.stderr)
     else:
         print(text, end="")
+
+
+def file_url(path: Any) -> str:
+    """로컬 경로 → `file:///` URL. Windows 역슬래시를 `/` 로 바꾸고 드라이브 문자는 유지한다."""
+    return "file:///" + str(path).replace("\\", "/").lstrip("/")
+
+
+def md_file_link(label: Any, path: Any) -> str:
+    """경로를 마크다운 링크로. 사용자 안내는 백틱 문자열이 아니라 이걸로 준다.
+
+    URL 을 `<...>` 로 감싸는 게 핵심이다. 폴더명이 `(202605940)[긴급]2026년 ...` 처럼
+    괄호·대괄호·공백을 달고 있어서, 감싸지 않으면 첫 `)` 에서 링크가 끊기고 공백에서 깨진다.
+    Windows 는 경로에 `<`/`>` 를 못 쓰므로 `<...>` 안이 깨질 일은 없다.
+    라벨 쪽 `[`·`]` 는 `_md_escape` 로 막는다.
+    """
+    return f"[{_md_escape(label)}](<{file_url(path)}>)"

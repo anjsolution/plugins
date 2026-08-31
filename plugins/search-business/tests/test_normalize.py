@@ -231,3 +231,37 @@ def test_pick_workers_by_average_size():
     assert pick_workers([1 << 20] * 5) == 4
     assert pick_workers([35 << 20] * 3) == 2
     assert pick_workers([]) == 1
+
+
+def test_md_file_link_wraps_url_in_angle_brackets():
+    """폴더명에 괄호·공백이 흔해서 <> 로 감싸지 않으면 첫 ')' 에서 링크가 끊긴다."""
+    link = nz.md_file_link("(202605940)[긴급]VMS 공사", r"C:\out\(202605940)[긴급]VMS 공사")
+    assert link.startswith(r"[(202605940)\[긴급\]VMS 공사](<file:///C:/out/")
+    assert link.endswith(">)")
+    assert "\\" not in nz.file_url(r"C:\a\b")   # 역슬래시가 남지 않는다
+
+
+def test_existing_download_matches_name_and_size(tmp_path):
+    """--skip-existing 판정: 이름만 보고 건너뛰면 중간에 끊긴 파일을 완료로 착각한다."""
+    from _ebid.attachments import existing_download
+    att = {"orgn_file_nm": "단가산출서.xlsx", "att_file_siz": 10}
+    assert existing_download(att, tmp_path) is None            # 파일 없음 → 받는다
+
+    target = tmp_path / "단가산출서.xlsx"
+    target.write_bytes(b"1234")                                 # 크기 불일치(끊긴 파일)
+    assert existing_download(att, tmp_path) is None            # → 다시 받는다
+
+    target.write_bytes(b"0123456789")                           # 크기 일치
+    done = existing_download(att, tmp_path)
+    assert done is not None and done["size"] == 10 and done["사유"] == "이미 받음"
+
+
+def test_existing_download_without_expected_size(tmp_path):
+    """서버가 크기를 안 주면 대조를 못 하므로 비어 있지 않은 파일만 건너뛰고 사유에 남긴다."""
+    from _ebid.attachments import existing_download
+    att = {"orgn_file_nm": "공고문.hwp", "att_file_siz": None}
+    (tmp_path / "공고문.hwp").write_bytes(b"")
+    assert existing_download(att, tmp_path) is None            # 빈 파일 → 받는다
+    (tmp_path / "공고문.hwp").write_bytes(b"x")
+    done = existing_download(att, tmp_path)
+    assert done is not None and "크기 미확인" in done["사유"]

@@ -46,6 +46,7 @@ def test_fetch_help_shows_out_dir_and_batch(tmp_path):
     assert "--out-dir" in h and "./ebid-out" in h
     assert "--out " not in h.replace("--out-dir", "")   # 폴더용에 --out 을 두지 않는다
     assert "공고번호 [공고번호 ...]" in h                  # 배치 입력
+    assert "--skip-existing" in h                       # 실패분만 재시도
     assert list(tmp_path.iterdir()) == []
 
 

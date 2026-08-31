@@ -10,9 +10,11 @@
 `--out-dir` 로 구분했다 — 같은 이름이면 파일 경로를 넘겨도 그 이름의 폴더가 조용히 생긴다.
 
 공고를 여러 건 주면 세션을 한 번만 열고 공고 확인·목록·다운로드를 병렬로 돌린다
-(실측: 10공고 40파일 211MB 가 직렬 177초 → 배치 35초).
+(실측: 10공고 40파일 211MB 가 직렬 177초 → 배치 28초).
 
-실패한 첨부는 결과 JSON `실패` 에 공고번호·파일명·종류(network/http/server/file)·메시지로 남고,
+실패한 첨부는 결과 JSON `실패` 에 공고번호·파일명·종류(network/http/server/file)·메시지로 남는다.
+부분 실패(종료코드 3) 뒤에는 같은 명령에 `--skip-existing` 만 붙여 다시 돌리면 실패분만 받는다.
+받은 목록은
 받은 목록은 `<out-dir>/_받은목록.md` 에도 기록된다 — 파일이 공고별 폴더로 흩어지기 때문이다.
 Exit: 0 성공 / 1 통신·조회 실패 / 2 공고 미발견 또는 인자 오류 / 3 부분 성공
 """
@@ -32,10 +34,11 @@ import json
 from typing import Any
 
 from _ebid.attachments import (MAX_DOWNLOAD_WORKERS, MAX_RETRIES, default_folder_name,
-                               download_one_attachment, fetch_attachment_list, pick_workers,
-                               resolve_notice)
+                               download_one_attachment, existing_download,
+                               fetch_attachment_list, pick_workers, resolve_notice)
 from _ebid.client import EbidClient
 from _ebid.errors import NOTICE_NO_HINT, KoreanArgumentParser, is_notice_no, report_error
+from _ebid.normalize import md_file_link
 from _ebid.parallel import map_parallel
 
 DEFAULT_OUT_DIR = "./ebid-out"
@@ -52,17 +55,22 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="다운로드 없이 첨부 목록만 출력 (파일을 만들지 않음)")
     parser.add_argument("--only", nargs="+", default=None,
                         help="파일명 부분일치 필터 — 일치하는 첨부만 다운로드")
+    parser.add_argument("--skip-existing", dest="skip_existing", action="store_true",
+                        help="이미 받은 파일(같은 폴더·이름·크기)은 건너뛴다 — 부분 실패 뒤 실패분만 재시도할 때")
     return parser.parse_args(argv)
 
 
 def write_manifest(out_dir: Path, notices: list[dict[str, Any]]) -> Path:
     """받은 파일이 공고별 폴더로 흩어지므로 출처·크기·실패를 한 파일에 모아 둔다."""
-    lines = ["# ebid 첨부 받은 목록", ""]
+    lines = ["# ebid 첨부 받은 목록", "",
+             "받은 위치: " + md_file_link(out_dir.name or out_dir, out_dir.resolve()), ""]
     for n in notices:
         lines.append(f"## ({n['공고번호']}) {n['공고명']}")
-        lines.append(f"- 폴더: `{n['저장폴더']}`")
+        lines.append("- 폴더: " + md_file_link(Path(n["저장폴더"]).name, n["저장폴더"]))
         for f in n["저장"]:
             lines.append(f"  - {f['filename']} — {int(f.get('size') or 0):,}B")
+        for f in n.get("건너뜀", []):
+            lines.append(f"  - ⏭ {f['filename']} — {int(f.get('size') or 0):,}B ({f.get('사유')})")
         for f in n["실패"]:
             lines.append(f"  - ❌ {f['filename']} — [{f.get('종류')}] {f.get('error')}")
         lines.append("")
@@ -124,18 +132,30 @@ def main(argv: list[str] | None = None) -> int:
                           for n, atts in found], ensure_ascii=False, indent=2))
         return 0 if not missing else 3
 
-    jobs = [(n, a) for n, atts in found for a in atts]
-    if not jobs:
-        print("[]")
-        return 0 if not missing else 3
-
-    total_bytes = sum(int(a.get("att_file_siz") or 0) for _, a in jobs)
-    workers = pick_workers([a.get("att_file_siz") for _, a in jobs])
     out_dir = Path(args.out_dir)
     folders = {n["noti_no"]: out_dir / default_folder_name(n["noti_no"], n.get("noti_nm", ""))
                for n, _ in found}
     for folder in folders.values():
         folder.mkdir(parents=True, exist_ok=True)
+
+    jobs: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    skipped: list[tuple[str, dict[str, Any]]] = []
+    for notice, atts in found:
+        for attachment in atts:
+            done = existing_download(attachment, folders[notice["noti_no"]]) if args.skip_existing else None
+            if done is None:
+                jobs.append((notice, attachment))
+            else:
+                skipped.append((notice["noti_no"], done))
+    if skipped:
+        print(f"[ebid] 이미 받은 {len(skipped)}개 건너뜀 (--skip-existing)", file=sys.stderr)
+    if not jobs:
+        print(f"[ebid] 받을 파일이 없습니다 (건너뜀 {len(skipped)}개).", file=sys.stderr)
+        print("[]")
+        return 0 if not missing else 3
+
+    total_bytes = sum(int(a.get("att_file_siz") or 0) for _, a in jobs)
+    workers = pick_workers([a.get("att_file_siz") for _, a in jobs])
     print(f"[ebid] {len(found)}개 공고 / {len(jobs)}개 파일 / {total_bytes / 1048576:.1f}MB "
           f"→ {out_dir} (동시 {workers})", file=sys.stderr)
 
@@ -147,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
 
     per_notice: dict[str, dict[str, Any]] = {
         n["noti_no"]: {"공고번호": n["noti_no"], "공고명": n.get("noti_nm"),
-                       "저장폴더": str(folders[n["noti_no"]]), "저장": [], "실패": []}
+                       "저장폴더": str(folders[n["noti_no"]]), "저장": [], "건너뜀": [], "실패": []}
         for n, _ in found}
     for (notice, attachment), (result, exc) in zip(jobs, results):
         entry = per_notice[notice["noti_no"]]
@@ -159,13 +179,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             entry["저장"].append(result)
 
+    for notice_no, done in skipped:
+        per_notice[notice_no]["건너뜀"].append(done)
+
     notices = list(per_notice.values())
     manifest = write_manifest(out_dir, notices)
     saved = sum(len(n["저장"]) for n in notices)
     failed = sum(len(n["실패"]) for n in notices)
     print(json.dumps({"받은위치": str(out_dir), "받은목록": str(manifest),
                       "공고": notices, "미발견": missing,
-                      "합계": {"공고": len(notices), "성공": saved, "실패": failed}},
+                      "합계": {"공고": len(notices), "성공": saved,
+                             "건너뜀": len(skipped), "실패": failed}},
                      ensure_ascii=False, indent=2))
     print(f"[ebid] 완료: {saved}/{saved + failed} 파일 성공, 받은목록 {manifest}", file=sys.stderr)
     for n in notices:

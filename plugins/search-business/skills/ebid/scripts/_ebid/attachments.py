@@ -241,3 +241,30 @@ def pick_workers(sizes: list[Any]) -> int:
         return 1
     average = sum(values) / len(values)
     return 2 if average > 10 * 1024 * 1024 else MAX_DOWNLOAD_WORKERS
+
+
+def existing_download(attachment: dict[str, Any], out_dir: Path) -> dict[str, Any] | None:
+    """이미 받아 둔 파일이면 그 사실을, 아니면 None 을 돌려준다 (`--skip-existing` 판정).
+
+    같은 공고 폴더 안의 **파일명 + 바이트 크기**가 목록의 값과 맞을 때만 건너뛴다. 크기를 보는
+    이유는 중간에 끊긴 파일을 완료로 착각하지 않기 위해서다 — 부분 실패 뒤 재실행할 때
+    실패한 것만 다시 받는 게 이 옵션의 목적이라 그 판정이 틀리면 쓸모가 없다.
+    서버가 크기를 안 주면(0/None) 크기 대조를 못 하므로 비어 있지 않은 파일만 건너뛰고
+    그 사실을 `사유` 에 남긴다.
+    """
+    try:
+        name = safe_attachment_filename(attachment["orgn_file_nm"])
+    except (ValueError, KeyError):
+        return None
+    dest = out_dir / name
+    if not dest.is_file():
+        return None
+    actual = dest.stat().st_size
+    expected = int(attachment.get("att_file_siz") or 0)
+    if expected:
+        if actual != expected:
+            return None  # 크기가 다르면 중간에 끊긴 것 — 다시 받는다
+        return {"filename": name, "size": actual, "사유": "이미 받음"}
+    if actual <= 0:
+        return None
+    return {"filename": name, "size": actual, "사유": "이미 받음(크기 미확인)"}

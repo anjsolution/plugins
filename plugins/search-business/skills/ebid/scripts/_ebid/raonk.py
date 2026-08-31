@@ -59,7 +59,7 @@ DOWNLOAD_ENDPOINT = f"{BASE_URL}/raonkDownload/process.dx"
 # c11(실제 다운로드)이 fetch_attachment() 안에서 연달아 발사되던 문제를 코드 리뷰로 지적받고
 # 추가함 — 이전에는 download_attachment.py 의 "첨부 파일 간" 1초 대기만 있었고, 첨부 1건 내부의
 # c10→c11 사이에는 간격이 없었다.
-REQUEST_INTERVAL_SECONDS = 1.0
+REQUEST_INTERVAL_SECONDS = 0.25  # attachments.py 와 동일 정책 (c10 → c11 사이 대기)
 
 _UNIT_SEP = "\x0b"  # RaonKBase64._trans_unitDelimiter
 _FIELD_SEP = "\x0c"  # RaonKBase64._trans_unitAttributeDelimiter

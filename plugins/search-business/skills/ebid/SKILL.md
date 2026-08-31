@@ -21,7 +21,8 @@ python scripts/ebid_search_common.py   --from 20260815 --md                     
 python scripts/ebid_search_common.py   --keyword "감리" --type 용역 --md          # 유형이 명백하거나 사용자가 지정한 경우에만 --type
 python scripts/ebid_result.py --notice 202602664 --table                          # 공고 상세·개찰결과
 python scripts/ebid_fetch.py  --notice 202602663 --list                           # 첨부 목록 (파일 안 만듦)
-python scripts/ebid_fetch.py  --notice 202602663 --only 단가 --out "./(202602663)공고명"
+python scripts/ebid_fetch.py  --notice 202602663 --only 단가                    # 기본 ./ebid-out/ 밑에 받음
+python scripts/ebid_fetch.py  --notice 202605940 202605691 --out-dir ./자료   # 공고 여러 건 배치
 ```
 - stdout 은 JSON. `--md` 는 대화창에 그대로 붙일 마크다운 표, `--table` 은 터미널용 한 줄 표. 진단은 stderr.
 - 종료코드: 0 성공 · 1 통신 실패 · 2 인자 오류/공고 미발견 · 3 첨부·상세 **일부** 실패(성공분은 출력됨). 실패 건은 결과 JSON 의 `실패`(첨부) / `상세오류`(계약) 에 **종류 코드**(network·http·server·file)와 메시지로 남는다 — 답변에 실패 건과 종류를 그대로 적는다. `network` 면 사용자 환경(프록시·Codex 샌드박스) 문제라 재시도보다 환경 안내가 먼저.
@@ -103,7 +104,10 @@ python scripts/ebid_fetch.py  --notice 202602663 --only 단가 --out "./(2026026
 - 딥링크는 결과 JSON 의 `딥링크` 값을 **전체 URL 그대로** 안내한다. 중간을 `...` 로 줄이면 식별자가 깨져 목록 화면으로 떨어진다. 비어 있으면 "ebid.ex.co.kr → 전자조달 → 입찰공고 → 공고번호 검색" 을 안내한다.
 
 ## 첨부·판독 규칙
-- 목록은 `--list`, 다운로드는 반드시 `--out` 을 지정한다. 대화 중 기본 폴더는 현재 폴더 밑 `(공고번호)공고명`.
+- 목록은 `--list`(파일 안 만듦), 다운로드는 `--out-dir`(폴더). 검색 CLI 의 `--out` 은 **파일 경로**라 이름이 다르다 — 바꿔 넘기면 그 이름의 폴더가 조용히 생긴다.
+- **첨부는 임시 폴더에 받지 않는다.** 항상 워크스페이스 안(기본 `./ebid-out/`)에 받는다 — 세션이 끝나 사라지면 다시 받는 비용이 크고(10공고 ≈ 211MB), 사용자가 문서 스킬로 열어봐야 한다. 그 밑에 공고별 `(공고번호)공고명/` 폴더와 `_받은목록.md` 가 생긴다.
+- **공고 여러 건은 한 번에 준다** — `--notice A B C`. 세션 1회 + 병렬로 처리한다(실측 10공고 40파일 211MB: 공고별 반복 호출 177초 → 배치 28초). 공고마다 따로 호출하지 않는다.
+- 받기 전에 `--list` 로 **합계 용량을 확인해 사용자에게 알린다.** 100MB 를 넘으면 받을지 먼저 묻는다.
 - hwp/hwpx/pdf/xlsx 는 문서 스킬(kordoc 등)로 변환한 뒤 읽는다. 변환 도구가 없으면 다운로드까지만 하고 설치를 안내한다.
 - 검색·스크립트는 후보를 찾는 데까지다. "없다"는 판정은 원문을 직접 읽은 뒤에만 내린다 → `references/문서-판독-지침.md`.
 

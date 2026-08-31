@@ -40,9 +40,19 @@ def test_contract_search_help_mentions_detail(tmp_path):
         assert opt in r.stdout
 
 
-def test_fetch_without_out_or_list_exit_2(tmp_path):
-    r = run("ebid_fetch.py", "--notice", "202602663", cwd=tmp_path)
-    assert r.returncode == 2 and "--out" in r.stderr
+def test_fetch_help_shows_out_dir_and_batch(tmp_path):
+    """--out-dir 은 폴더, 검색의 --out 은 파일 — 이름이 달라야 바꿔 넘기는 사고가 안 난다."""
+    h = run("ebid_fetch.py", "--help", cwd=tmp_path).stdout
+    assert "--out-dir" in h and "./ebid-out" in h
+    assert "--out " not in h.replace("--out-dir", "")   # 폴더용에 --out 을 두지 않는다
+    assert "공고번호 [공고번호 ...]" in h                  # 배치 입력
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_rejects_bad_notice_in_batch(tmp_path):
+    """배치 중 하나라도 형식이 틀리면 네트워크를 타기 전에 거절한다."""
+    r = run("ebid_fetch.py", "--notice", "202602663", "abc", cwd=tmp_path)
+    assert r.returncode == 2 and "9자리" in r.stderr and r.stdout == ""
     assert list(tmp_path.iterdir()) == []      # 아무것도 만들지 않음
 
 

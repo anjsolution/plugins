@@ -213,3 +213,21 @@ def test_write_output_file_and_stdout(tmp_path, capsys):
     assert out.read_text(encoding="utf-8") == "hello\n" and cap.out == "" and "저장:" in cap.err
     nz.write_output("x\n", None)
     assert capsys.readouterr().out == "x\n"
+
+
+def test_attachment_filename_sanitized():
+    """폴더명만 정화하고 파일명을 방치하면 서버가 이상한 이름을 주는 날 깨진다."""
+    from _ebid.attachments import safe_attachment_filename as safe
+    assert safe("a/b:c*d?.hwp") == "b c d .hwp"
+    assert "/" not in safe("x/y.hwp") and ":" not in safe("a:b.hwp")
+    long_name = safe("가" * 200 + ".xlsx")
+    assert len(long_name) <= 100 and long_name.endswith(".xlsx")
+    assert safe("../../evil.txt") == "evil.txt"
+
+
+def test_pick_workers_by_average_size():
+    """큰 파일 소수엔 병렬이 역효과였다 — 실측 35MB 3파일 직렬 8.9s vs 병렬4 12.3s."""
+    from _ebid.attachments import pick_workers
+    assert pick_workers([1 << 20] * 5) == 4
+    assert pick_workers([35 << 20] * 3) == 2
+    assert pick_workers([]) == 1

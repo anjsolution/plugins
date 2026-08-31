@@ -2,6 +2,18 @@
   "name": "search-business",
   "version": "0.1.0",
   "description": "공공 발주 공고·계약(한국도로공사 ebid) 검색·개찰결과·첨부 수집",
-  "author": { "name": "Ai-Ops", "email": "khchoi@anjsol.co.kr" },
-  "keywords": ["ebid", "입찰", "공고", "계약", "vms", "its", "첨부", "공고검색"]
+  "author": {
+    "name": "Ai-Ops",
+    "email": "khchoi@anjsol.co.kr"
+  },
+  "keywords": [
+    "ebid",
+    "입찰",
+    "공고",
+    "계약",
+    "vms",
+    "its",
+    "첨부",
+    "공고검색"
+  ]
 }

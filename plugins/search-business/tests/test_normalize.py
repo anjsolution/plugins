@@ -249,6 +249,16 @@ def test_md_file_link_encodes_space_and_parens():
     assert "\\" not in nz.file_url(r"C:\a\b")                    # 역슬래시가 남지 않는다
 
 
+def test_md_file_link_escapes_underscore_in_label():
+    """실측: 라벨의 언더스코어를 이스케이프 안 하면 Claude Code 터미널이 기울임으로 오인해
+    링크 문법 자체가 깨지고 URL 원문이 그대로 노출된다(백틱으로 감싸도 소용없음)."""
+    link = nz.md_file_link("ebid_공고_VMS_20260831-1749.md", r"C:\out\ebid_공고_VMS_20260831-1749.md")
+    label = link[1:].split("](", 1)[0]
+    assert label == r"ebid\_공고\_VMS\_20260831-1749.md"
+    url = link.split("](", 1)[1][:-1]
+    assert "_" in url                                               # URL 쪽 파일명은 그대로
+
+
 def test_existing_download_matches_name_and_size(tmp_path):
     """--skip-existing 판정: 이름만 보고 건너뛰면 중간에 끊긴 파일을 완료로 착각한다."""
     from _ebid.attachments import existing_download

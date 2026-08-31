@@ -190,13 +190,15 @@ def download_one_attachment(
     return result
 
 _FS_FORBIDDEN = re.compile(r'[\\/:*?"<>|\r\n\t]+')
-FOLDER_NAME_MAX = 80   # (공고번호)공고명 폴더명 길이 상한 — 윈도우 경로 한계 여유
+FOLDER_NAME_MAX = 80   # <공고번호>_<공고명> 폴더명 길이 상한 — 윈도우 경로 한계 여유
 FILE_NAME_MAX = 100    # 첨부 파일명 길이 상한 (확장자 포함)
 
 def default_folder_name(notice_no: str, notice_name: str) -> str:
     clean = _FS_FORBIDDEN.sub(" ", str(notice_name or "")).strip()
     clean = re.sub(r"\s+", " ", clean).rstrip(". ")
-    name = f"({notice_no}){clean}" if clean else f"({notice_no})"
+    # 접두사에 괄호를 쓰지 않는다. 마크다운 링크의 URL 은 `](...)` 안에 들어가므로 경로에 괄호가
+    # 있으면 매번 `%28`·`%29` 로 인코딩해야 읽기 어려워진다 — 우리가 만드는 이름에 굳이 넣을 이유가 없다.
+    name = f"{notice_no}_{clean}" if clean else str(notice_no)
     return name[:FOLDER_NAME_MAX].rstrip(". ")
 
 

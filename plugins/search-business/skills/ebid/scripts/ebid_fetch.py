@@ -5,7 +5,7 @@
     python <스킬폴더>/scripts/ebid_fetch.py --notice 202605940 202605691 --out-dir ./자료
     python <스킬폴더>/scripts/ebid_fetch.py --notice 202602663 --only 단가산출서
 
---list 는 파일을 만들지 않는다. 다운로드는 `--out-dir` 밑에 공고별 `(공고번호)공고명/` 폴더를
+--list 는 파일을 만들지 않는다. 다운로드는 `--out-dir` 밑에 공고별 `<공고번호>_<공고명>/` 폴더를
 만들어 받는다(기본 ./ebid-out). 검색 CLI 의 `--out` 은 파일 경로이지만 여기는 폴더라서 이름을
 `--out-dir` 로 구분했다 — 같은 이름이면 파일 경로를 넘겨도 그 이름의 폴더가 조용히 생긴다.
 
@@ -50,7 +50,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--notice", nargs="+", required=True, metavar="공고번호",
                         help="공고번호 9자리. 여러 개를 띄어쓰기로 주면 배치 처리 (예: 202602663 202605940)")
     parser.add_argument("--out-dir", dest="out_dir", default=DEFAULT_OUT_DIR,
-                        help=f"받을 위치 (기본 {DEFAULT_OUT_DIR}). 그 밑에 공고별 (공고번호)공고명 폴더가 생긴다")
+                        help=f"받을 위치 (기본 {DEFAULT_OUT_DIR}). 그 밑에 공고별 <공고번호>_<공고명> 폴더가 생긴다")
     parser.add_argument("--list", dest="list_only", action="store_true",
                         help="다운로드 없이 첨부 목록만 출력 (파일을 만들지 않음)")
     parser.add_argument("--only", nargs="+", default=None,

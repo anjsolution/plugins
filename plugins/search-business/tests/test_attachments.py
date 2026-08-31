@@ -11,10 +11,18 @@ from _ebid import attachments as at  # noqa: E402
 
 def test_default_folder_name_strips_forbidden_and_truncates():
     name = at.default_folder_name("202602663", 'A/B:C*D?"E<F>G|H')
-    assert name.startswith("(202602663)")
+    assert name.startswith("202602663_")
     assert not any(c in name for c in '\/:*?"<>|')
     long = at.default_folder_name("1", "x" * 200)
     assert len(long) <= 80
+
+
+def test_default_folder_name_has_no_parentheses_prefix():
+    """접두사에 괄호를 쓰면 링크 URL 마다 %28·%29 인코딩이 붙어 읽기 어려워진다."""
+    name = at.default_folder_name("202605940", "VMS 통합설치공사")
+    assert name == "202605940_VMS 통합설치공사"
+    assert not name.startswith("(")
+    assert at.default_folder_name("202605940", "") == "202605940"
 
 
 def test_sniff_kinds():

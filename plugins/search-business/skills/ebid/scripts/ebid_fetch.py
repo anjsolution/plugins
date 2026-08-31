@@ -14,7 +14,6 @@
 
 실패한 첨부는 결과 JSON `실패` 에 공고번호·파일명·종류(network/http/server/file)·메시지로 남는다.
 부분 실패(종료코드 3) 뒤에는 같은 명령에 `--skip-existing` 만 붙여 다시 돌리면 실패분만 받는다.
-받은 목록은
 받은 목록은 `<out-dir>/_받은목록.md` 에도 기록된다 — 파일이 공고별 폴더로 흩어지기 때문이다.
 Exit: 0 성공 / 1 통신·조회 실패 / 2 공고 미발견 또는 인자 오류 / 3 부분 성공
 """
@@ -65,7 +64,7 @@ def write_manifest(out_dir: Path, notices: list[dict[str, Any]]) -> Path:
     lines = ["# ebid 첨부 받은 목록", "",
              "받은 위치: " + md_file_link(out_dir.name or out_dir, out_dir.resolve()), ""]
     for n in notices:
-        lines.append(f"## ({n['공고번호']}) {n['공고명']}")
+        lines.append(f"## {n['공고번호']}_{n['공고명']}")
         lines.append("- 폴더: " + md_file_link(Path(n["저장폴더"]).name, n["저장폴더"]))
         for f in n["저장"]:
             lines.append(f"  - {f['filename']} — {int(f.get('size') or 0):,}B")

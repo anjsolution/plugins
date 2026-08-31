@@ -19,8 +19,13 @@ ITEM = {
 
 def test_codes_json_loads_and_has_sections():
     data = json.loads((SCRIPTS / "_ebid/codes.json").read_text(encoding="utf-8"))
-    for k in ("발주유형", "상태정확", "상태첫글자", "계약방법", "지역", "제외필드", "딥링크메뉴"):
+    for k in ("발주유형", "상태정확", "계약방법", "지역", "제외필드", "딥링크메뉴"):
         assert k in data
+    # 첫글자 폴백은 제거됐다 — U 계열이 낙찰/유찰/재공고/재입찰중으로 갈리는데
+    # 폴백이 전부 "입찰완료" 로 뭉개고 있었다.
+    assert "상태첫글자" not in data
+    assert data["상태정확"]["UB"] == "낙찰" and data["상태정확"]["UP"] == "유찰"
+    assert data["상태정확"]["UA"] == "재공고" and data["상태정확"]["QQ"] == "적격심사중"
     assert data["계약방법"] == {"CTA": "일반경쟁", "CTE": "지명경쟁", "CTH": "제한경쟁", "CTL": "전자수의"}
     assert not hasattr(nz, "fetch_cpt_terms_labels")
     for k in ():
@@ -37,7 +42,7 @@ def test_normalize_notice_keys_and_passthrough():
     row = nz.normalize_notice(ITEM)  # 라벨 인자 생략 = codes.json 정적 매핑
     assert row["발주유형"] == "용역"
     assert row["지역"] == "수도권본부" and row["지역코드"] == "0B"
-    assert row["상태"] == "입찰완료" and row["공고일"] == "2025-07-02"
+    assert row["상태"] == "낙찰" and row["공고일"] == "2025-07-02"
     assert row["계약방법"] == "일반경쟁"
     assert row["딥링크"].startswith("https://ebid.ex.co.kr/default.do?menuId=NPRO12001&noti_id=NID")
     assert row["딥링크"].endswith("&noti_cont_id=CID&noti_no=202506507&bid_no=1&bid_rev=1")
@@ -48,9 +53,21 @@ def test_normalize_notice_keys_and_passthrough():
     assert "sys_id" not in row                 # 제외필드
 
 
-def test_prog_sts_fallback_by_initial():
-    assert nz.prog_sts_label("EZ") == "공고중"
-    assert nz.prog_sts_label("QQ") == "QQ"
+def test_prog_sts_unknown_code_passes_through():
+    """매핑에 없으면 코드를 그대로 낸다 — 첫글자 추측은 조용히 틀린 라벨을 만든다."""
+    assert nz.prog_sts_label("EZ") == "EZ"
+    assert nz.prog_sts_label("QQ") == "적격심사중"
+    assert nz.prog_sts_label("UB") == "낙찰"
+    assert nz.prog_sts_label("") == ""
+
+
+def test_bid_stage_by_status():
+    stage = lambda code: nz.normalize_notice({"prog_sts": code})["입찰단계"]
+    assert stage("AY") == "사전공개(입찰공고 전)"
+    assert stage("CB") == "취소됨"
+    assert stage("UB") == "입찰 마감(결과 조회 가능)"
+    assert stage("MY") == "입찰 마감(결과 조회 가능)"
+    assert stage("EY") == "입찰 진행 중"
 
 
 def test_fmt_dt():

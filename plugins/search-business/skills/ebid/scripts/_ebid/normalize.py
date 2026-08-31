@@ -15,7 +15,8 @@ from .client import BASE_URL
 CODES: dict[str, Any] = json.loads((Path(__file__).with_name("codes.json")).read_text(encoding="utf-8"))
 CLASS_LABEL_BY_CODE: dict[str, str] = CODES["발주유형"]
 PROG_STS_EXACT: dict[str, str] = CODES["상태정확"]
-PROG_STS_BY_INITIAL: dict[str, str] = CODES["상태첫글자"]
+# 개찰이 끝나 결과를 조회할 수 있는 상태들 (낙찰 확정 전 단계 포함)
+PROG_STS_CLOSED = ("낙찰", "유찰", "재공고", "개찰완료", "적격심사중", "협상중")
 # 계약방법 코드표 = 사이트 공통코드 PE080*/BID_USE_YN (CTA·CTE·CTH·CTL). PE075* 실시간 조회는 빈 응답이라
 # 제거했다(2026-08-30 실측) — 새 코드가 passthrough 로 나타나면 PE080 을 다시 조회해 여기에 추가한다.
 CPT_TERMS_LABELS: dict[str, str] = CODES["계약방법"]
@@ -38,7 +39,9 @@ def build_notice_deeplink(item: dict[str, Any]) -> str:
 def prog_sts_label(code: str | None) -> str:
     if not code:
         return ""
-    return PROG_STS_EXACT.get(code) or PROG_STS_BY_INITIAL.get(code[0], code)
+    # 매핑에 없으면 코드를 그대로 돌려준다. 첫글자로 추측하면 조용히 틀린 라벨이 붙는다
+    # (U 계열이 낙찰/유찰/재공고/재입찰중으로 갈리는 것을 놓친 전례가 있다).
+    return PROG_STS_EXACT.get(code, code)
 
 def fmt_dt(value: Any) -> str:
     """'202603261400' → '2026-03-26 14:00' (그 외 형식은 그대로)."""
@@ -71,8 +74,10 @@ def normalize_notice(item: dict[str, Any], cpt_labels: dict[str, str] | None = N
         "공고일": fmt_dt(item.get("noti_date")),
         "상태": sts_label,
         "상태코드": sts,
-        "입찰단계": "입찰 마감(결과 조회 가능)" if sts_label in ("입찰완료",)
-        else ("취소됨" if sts_label == "취소공고" else "입찰 진행 중"),
+        "입찰단계": "사전공개(입찰공고 전)" if sts_label == "사전공개"
+        else ("취소됨" if sts_label == "취소공고"
+              else ("입찰 마감(결과 조회 가능)" if sts_label in PROG_STS_CLOSED
+                    else "입찰 진행 중")),
         "계약방법": cpt_labels.get(cpt, cpt),
         "계약방법코드": cpt,
         "제한유형코드": item.get("lmtcpt_apply_bas_cd") or "",

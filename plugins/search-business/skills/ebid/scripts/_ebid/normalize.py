@@ -6,7 +6,9 @@ references/ebid-필드사전.md.
 from __future__ import annotations
 
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -198,6 +200,28 @@ def _md_escape(text: Any) -> str:
             .replace("_", "\\_"))
 
 
+def _highlight_html(escaped_name: str, keyword: str | None) -> str:
+    """HTML 표용 강조 — 마크다운의 `**` 대신 `<strong>`. 규칙은 `_highlight` 와 같다."""
+    kw = _esc(keyword or "").strip()
+    if not kw:
+        return escaped_name
+    return re.sub(f"({re.escape(kw)})", r"<strong>\1</strong>", escaped_name, flags=re.IGNORECASE)
+
+
+def _highlight(escaped_name: str, keyword: str | None) -> str:
+    """이미 이스케이프된 공고명에서 검색어를 굵게 만든다.
+
+    마크다운 링크 라벨 안에서도 강조가 먹는다(`[a **b** c](url)`). 이스케이프를 먼저 하고
+    같은 규칙으로 이스케이프한 검색어를 찾는 이유는, `_md_escape` 가 `_`·`[` 를 바꾸면서
+    글자 위치가 밀리기 때문이다 — 원문 기준으로 찾으면 엉뚱한 자리에 `**` 가 붙는다.
+    대소문자는 구분하지 않는다(ebid 검색 자체가 그렇다).
+    """
+    kw = _md_escape(keyword or "").strip()
+    if not kw:
+        return escaped_name
+    return re.sub(f"({re.escape(kw)})", r"**\1**", escaped_name, flags=re.IGNORECASE)
+
+
 def _biz_no(value: Any) -> str:
     """사업자번호 10자리를 000-00-00000 로. 10자리 숫자가 아니면 원문 그대로."""
     digits = str(value or "").strip()
@@ -233,10 +257,35 @@ def render_notice_markdown(rows: list[dict[str, Any]], *, keyword: str, period_l
         out.append("| 공고번호 | 지역 | 공고명 | 설계금액 | 계약방법 | 공고일 | 상태 |")
         out.append("|---|---|---|---:|---|---|---|")
         for r in group:
-            name = _md_escape(r.get("공고명"))
+            name = _highlight(_md_escape(r.get("공고명")), keyword)
             link = f"[{name}]({r['딥링크']})" if r.get("딥링크") else name
             out.append(f"| {r.get('공고번호')} | {_md_escape(r.get('지역'))} | {link} | {_amount(r.get('설계금액원'))}"
                        f" | {_md_escape(r.get('계약방법'))} | {r.get('공고일')} | {_md_escape(r.get('상태'))} |")
+        out.append("")
+    if not out:
+        out.append(_empty_line(keyword, period_label))
+    return "\n".join(out).rstrip() + "\n"
+
+
+def render_notice_markdown_compact(rows: list[dict[str, Any]], *, keyword: str, period_label: str) -> str:
+    """공고 검색 결과 → 공고일·공고번호·공고명 세 열만. 훑어보기용 요약본.
+
+    상세본과 같은 데이터를 열만 줄여 다시 렌더링한다(검색은 이미 끝났으니 비용은 밀리초).
+    공고명의 딥링크는 남긴다 — 열이 아니라 링크라 폭을 차지하지 않으면서 바로 열어볼 수 있다.
+    발주유형 제목은 유지한다. 열에서 유형을 뺐으므로 제목마저 없애면 공사·물품 구분이 사라진다.
+    """
+    out: list[str] = []
+    for label in ("공사", "용역", "물품"):
+        group = [r for r in rows if r.get("발주유형") == label]
+        if not group:
+            continue
+        out.append(_table_title(label, keyword, period_label, len(group)))
+        out.append("| 공고일 | 공고번호 | 공고명 |")
+        out.append("|---|---|---|")
+        for r in group:
+            name = _highlight(_md_escape(r.get("공고명")), keyword)
+            link = f"[{name}]({r['딥링크']})" if r.get("딥링크") else name
+            out.append(f"| {r.get('공고일')} | {r.get('공고번호')} | {link} |")
         out.append("")
     if not out:
         out.append(_empty_line(keyword, period_label))
@@ -257,7 +306,7 @@ def render_contract_markdown(rows: list[dict[str, Any]], *, keyword: str, period
         out.append("| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |")
         out.append("|---|---|---|---|---|---|---:|---|")
     for r in rows:
-        head = (f"| {_md_escape(r.get('발주유형'))} | {r.get('연결공고번호') or '-'} | {_md_escape(r.get('계약명'))}"
+        head = (f"| {_md_escape(r.get('발주유형'))} | {r.get('연결공고번호') or '-'} | {_highlight(_md_escape(r.get('계약명')), keyword)}"
                 f" | {_md_escape(r.get('계약방법'))}")
         if not detail:
             out.append(f"{head} | {_biz_no(r.get('사업자번호'))} | {_md_escape(r.get('업체명'))}"
@@ -326,7 +375,7 @@ def render_notice_html(rows: list[dict[str, Any]], *, keyword: str, period_label
             continue
         body = []
         for r in group:
-            name = _esc(r.get("공고명"))
+            name = _highlight_html(_esc(r.get("공고명")), keyword)
             link = f"<a href=\"{_esc(r['딥링크'])}\" target=\"_blank\" rel=\"noopener\">{name}</a>" if r.get("딥링크") else name
             body.append([_esc(r.get("공고번호")), _esc(r.get("지역")), link, _esc(_amount(r.get("설계금액원"))),
                          _esc(r.get("계약방법")), _esc(r.get("공고일")), _esc(r.get("상태"))])
@@ -351,7 +400,8 @@ def render_contract_html(rows: list[dict[str, Any]], *, keyword: str, period_lab
         num = {6}
     body = []
     for r in rows:
-        head = [_esc(r.get("발주유형")), _esc(r.get("연결공고번호") or "-"), _esc(r.get("계약명")), _esc(r.get("계약방법"))]
+        head = [_esc(r.get("발주유형")), _esc(r.get("연결공고번호") or "-"),
+                _highlight_html(_esc(r.get("계약명")), keyword), _esc(r.get("계약방법"))]
         if not detail:
             body.append(head + [_esc(_biz_no(r.get("사업자번호"))), _esc(r.get("업체명")),
                                 _esc(_amount(r.get("계약금액원"))), _esc(r.get("체결일"))])
@@ -372,13 +422,16 @@ def render_contract_html(rows: list[dict[str, Any]], *, keyword: str, period_lab
     return _html_doc(title, meta, [section])
 
 
-def write_output(text: str, out_path: str | None) -> None:
+def write_output(text: str, out_path: str | None, link_label: str = "링크") -> None:
     """--out 이 있으면 파일에 쓰고 stdout 에는 아무것도 내지 않는다(대화 컨텍스트 절약). 없으면 stdout."""
     if out_path:
         p = Path(out_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
+        # 완성된 마크다운 링크를 같이 찍는다 — 호출자가 링크 규칙(절대경로·%20·%28·라벨
+        # 이스케이프)을 알 필요 없이 이 줄을 그대로 답변에 복사하면 된다.
         print(f"[ebid] 저장: {p.resolve()}", file=sys.stderr)
+        print(f"[ebid] {link_label}: {md_file_link(p.name, p)}", file=sys.stderr)
     else:
         print(text, end="")
 
@@ -415,3 +468,20 @@ def md_file_link(label: Any, path: Any) -> str:
     """
     url = file_url(path).replace("(", "%28").replace(")", "%29").replace(" ", "%20")
     return f"[{_md_escape(label)}]({url})"
+
+
+def build_result_filename(kind: str, keyword: str | None, suffix: str = "md", *,
+                          variant: str | None = None, stamp: str | None = None) -> str:
+    """검색 결과 파일명을 만든다 — `ebid_<공고|계약>_<키워드>_<YYYYMMDD-HHMM>.<확장자>`.
+
+    호출자가 이름을 짓지 않게 하려고 스크립트로 옮겼다. 규칙이 문서와 코드 양쪽에 있으면
+    한쪽만 고쳐지는 사고가 난다(링크 문법에서 여러 번 겪었다).
+
+    - 접두사에 괄호를 쓰지 않는다. 링크 URL 의 괄호는 매번 인코딩해야 해서 읽기 어려워진다.
+    - 키워드의 공백·경로 금지문자는 `_` 로, 키워드가 없으면 `전체`.
+    - 같은 분에 두 번 실행하면 이름이 겹치므로 초까지 붙인다(호출부가 충돌 시 재요청).
+    """
+    clean = re.sub(r"[^\w가-힣.-]+", "_", str(keyword or "").strip()).strip("_") or "전체"
+    stamp = stamp or f"{datetime.now():%Y%m%d-%H%M}"
+    tail = f"{variant}_{stamp}" if variant else stamp
+    return f"ebid_{kind}_{clean}_{tail}.{suffix}"

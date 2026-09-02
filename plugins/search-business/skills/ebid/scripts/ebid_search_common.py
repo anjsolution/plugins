@@ -27,12 +27,14 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import json
+from datetime import datetime
 from typing import Any
 
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
 from _ebid.normalize import (normalize_notice, print_table, render_notice_html,
-                             render_notice_markdown, write_output)
+                             render_notice_markdown, render_notice_markdown_compact, write_output,
+                             build_result_filename)
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
@@ -51,7 +53,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 표로 출력")
     parser.add_argument("--html", action="store_true", help="JSON 대신 HTML 표(브라우저·Artifact 용, 공고명 링크)")
-    parser.add_argument("--out", help="결과를 이 파일에 저장하고 stdout 에는 내지 않음 (형식은 --md/--html/JSON 그대로)")
+    parser.add_argument("--out", help="결과를 이 파일에 저장 (파일명을 직접 정할 때만. 보통은 --out-dir)")
+    parser.add_argument("--out-dir", dest="out_dir",
+                        help="이 폴더에 저장하고 파일명은 스크립트가 짓는다 — 호출자가 이름 규칙을 알 필요가 없다")
     parser.add_argument("--md", action="store_true",
                         help="JSON 대신 대화창용 마크다운 표로 출력 (발주유형별 표 + 공고명 딥링크)")
     return parser.parse_args(argv)
@@ -74,7 +78,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not args.date_from:
         print(f"[ebid] 기간 미지정 → 기본 최근 1년({from_date}~{to_date}) 적용. "
-              f"답변에 이 범위를 안내할 것 — 이력·과거 사업 질의면 --from 으로 범위를 넓혀 재검색",
+              f"이력·과거 사업 질의면 --from 으로 범위를 넓혀 재검색",
               file=sys.stderr)
 
     if not args.keyword:
@@ -104,11 +108,28 @@ def main(argv: list[str] | None = None) -> int:
         rows.extend(normalize_notice(it) for it in items or [])
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
-    period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
+    # 기간은 기본값이든 지정이든 항상 실제 날짜 범위로 낸다 — "1년" 이라고만 쓰면 언제 기준인지
+    # 알 수 없고, 답변에 날짜를 붙이려면 모델이 따로 계산해야 한다(그만큼 답변이 늦어진다).
+    out_path = args.out
+    stamp = f"{datetime.now():%Y%m%d-%H%M}"   # 요약본·상세본이 같은 시각을 공유해 짝이 맞는다
+    if not out_path and args.out_dir:
+        fmt = "html" if args.html else ("md" if args.md else "json")
+        out_path = str(Path(args.out_dir) / build_result_filename("공고", args.keyword, fmt, stamp=stamp))
+    period = (f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}"
+              f"~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}")
     if args.md:
-        write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), args.out)
+        if args.out_dir and not args.out:
+            # 훑어보기용 요약본을 함께 낸다. 같은 rows 를 다시 렌더링할 뿐이라 추가 요청이 없다.
+            brief = Path(args.out_dir) / build_result_filename(
+                "공고", args.keyword, "md", variant="summarize", stamp=stamp)
+            write_output(render_notice_markdown_compact(rows, keyword=args.keyword, period_label=period),
+                         str(brief), link_label="목록")
+            write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period),
+                         out_path, link_label="목록(상세)")
+        else:
+            write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.html:
-        write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), args.out)
+        write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.table:
         print_table(rows)
     else:

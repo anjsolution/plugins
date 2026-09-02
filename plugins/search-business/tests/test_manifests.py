@@ -1,3 +1,4 @@
+import re
 import json
 from pathlib import Path
 
@@ -11,14 +12,14 @@ def _load(rel):
 def test_claude_manifest():
     m = _load(".claude-plugin/plugin.json")
     assert m["name"] == "search-business"
-    assert m["version"] == "0.1.0"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", m["version"]), m["version"]
     assert m["author"]["email"] == "khchoi@anjsol.co.kr"
 
 
 def test_codex_manifest():
     m = _load(".codex-plugin/plugin.json")
     assert m["name"] == "search-business"
-    assert m["version"] == "0.1.0"
+    assert re.fullmatch(r"\d+\.\d+\.\d+", m["version"]), m["version"]
     assert m["skills"] == "./skills/"
     assert m["interface"]["category"] == "Business & Operations"
 

@@ -105,3 +105,16 @@ def test_search_help_mentions_out_and_html(tmp_path):
     for script in ("ebid_search_common.py", "ebid_search_contract.py"):
         h = run(script, "--help", cwd=tmp_path).stdout
         assert "--out" in h and "--html" in h, script
+
+
+def test_result_is_one_shot_and_hides_unmapped_codes():
+    """공고 한 건 조회는 상세·첨부·개찰을 한 번에 낸다. 매핑 없는 코드는 표에 내지 않는다."""
+    src = (SCRIPTS / "ebid_result.py").read_text(encoding="utf-8")
+    assert "fetch_attachment_list" in src          # 첨부를 같은 명령에서 받는다
+    assert '"첨부"' in src                          # 결과 JSON 에 첨부가 들어간다
+
+    # 주석이 아니라 실제로 출력되는 줄만 본다
+    table_block = src.split("if args.table:", 1)[1]
+    printed = "".join(l for l in table_block.splitlines() if not l.lstrip().startswith("#"))
+    assert "제한유형코드" not in printed
+    assert "'업종'" not in printed and '"업종"' not in printed

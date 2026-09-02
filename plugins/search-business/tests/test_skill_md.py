@@ -9,7 +9,13 @@ def test_frontmatter_and_length():
     fm = text.split("---")[1]
     assert re.search(r"^name: ebid$", fm, re.M)
     assert "description:" in fm and "공고 검색" in fm
-    assert len(text.splitlines()) <= 120
+    # 길이는 행 수가 아니라 글자 수로 잰다. 행 수로 재면 상한을 지키려고 한 줄에 300자를
+    # 몰아넣게 되고(실제로 345자 줄이 생겼다), 글자는 줄지 않으면서 읽기만 나빠진다.
+    assert len(text) <= 10_000, f"{len(text)}자 — 규칙을 references 로 옮기거나 줄일 것"
+    # 줄 길이는 본문만 본다 — 프론트매터 description 은 YAML 스칼라라 줄바꿈이 불가능하다.
+    body = text.split("---", 2)[2]
+    longest = max(len(l) for l in body.splitlines())
+    assert longest <= 300, f"{longest}자짜리 줄 — 한 줄에 규칙을 몰아넣지 말 것"
 
 
 def test_description_is_yaml_safe():

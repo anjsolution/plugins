@@ -368,3 +368,4 @@ def test_highlight_applies_to_contract_and_html():
 
     plain = nz.render_notice_html([notice], keyword="", period_label="1년")
     assert "<strong>" not in plain                           # 키워드 없으면 강조 없음
+

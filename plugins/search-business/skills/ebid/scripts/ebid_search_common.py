@@ -32,7 +32,8 @@ from typing import Any
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
 from _ebid.normalize import (normalize_notice, print_table, render_notice_html,
-                             render_notice_markdown, write_output)
+                             render_notice_markdown, write_output,
+                             build_result_filename)
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
 
@@ -51,7 +52,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--table", action="store_true", help="JSON 대신 사람용 표로 출력")
     parser.add_argument("--html", action="store_true", help="JSON 대신 HTML 표(브라우저·Artifact 용, 공고명 링크)")
-    parser.add_argument("--out", help="결과를 이 파일에 저장하고 stdout 에는 내지 않음 (형식은 --md/--html/JSON 그대로)")
+    parser.add_argument("--out", help="결과를 이 파일에 저장 (파일명을 직접 정할 때만. 보통은 --out-dir)")
+    parser.add_argument("--out-dir", dest="out_dir",
+                        help="이 폴더에 저장하고 파일명은 스크립트가 짓는다 — 호출자가 이름 규칙을 알 필요가 없다")
     parser.add_argument("--md", action="store_true",
                         help="JSON 대신 대화창용 마크다운 표로 출력 (발주유형별 표 + 공고명 딥링크)")
     return parser.parse_args(argv)
@@ -106,12 +109,16 @@ def main(argv: list[str] | None = None) -> int:
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
     # 기간은 기본값이든 지정이든 항상 실제 날짜 범위로 낸다 — "1년" 이라고만 쓰면 언제 기준인지
     # 알 수 없고, 답변에 날짜를 붙이려면 모델이 따로 계산해야 한다(그만큼 답변이 늦어진다).
+    out_path = args.out
+    if not out_path and args.out_dir:
+        fmt = "html" if args.html else ("md" if args.md else "json")
+        out_path = str(Path(args.out_dir) / build_result_filename("공고", args.keyword, fmt))
     period = (f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}"
               f"~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}")
     if args.md:
-        write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), args.out)
+        write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.html:
-        write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), args.out)
+        write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.table:
         print_table(rows)
     else:

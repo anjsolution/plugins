@@ -14,17 +14,17 @@ description: 한국도로공사 전자조달(ebid.ex.co.kr) **전용** — 입�
 
 ## 도구 — 스킬 폴더 기준 경로, 어느 작업 폴더에서든 실행
 ```bash
-python scripts/ebid_search_common.py   --keyword "구내통신" --md --out <파일>   # 입찰공고 검색 (공사·용역·물품)
-python scripts/ebid_search_contract.py --keyword "터널" --from 20240101 --md --out <파일>  # 계약공개현황 검색
-python scripts/ebid_search_contract.py --keyword "VMS" --detail --md --out <파일>  # 계약 + 건별 상세(담당자·업체·수의근거)
-python scripts/ebid_search_common.py   --from 20260815 --md --out <파일>          # 키워드 없이 최근 공고 전체 (--from 필수)
-python scripts/ebid_search_common.py   --keyword "감리" --type 용역 --md --out <파일>  # 유형이 명백할 때만 --type
-python scripts/ebid_result.py --notice 202602664 --table                          # 공고 상세·개찰결과
-python scripts/ebid_fetch.py  --notice 202602663 --list                           # 첨부 목록 (파일 안 만듦)
-python scripts/ebid_fetch.py  --notice 202602663 --only 단가                    # 기본 ./ebid-out/ 밑에 받음
-python scripts/ebid_fetch.py  --notice 202605940 202605691 --out-dir ./자료   # 공고 여러 건 배치
+python scripts/ebid_search_common.py   --keyword "구내통신" --md --out-dir <폴더>       # 입찰공고 검색 (공사·용역·물품)
+python scripts/ebid_search_common.py   --keyword "감리" --type 용역 --md --out-dir <폴더> # 유형이 명백할 때만 --type
+python scripts/ebid_search_common.py   --from 20260815 --md --out-dir <폴더>           # 키워드 없이 최근 공고 (--from 필수)
+python scripts/ebid_search_contract.py --keyword "터널" --from 20240101 --md --out-dir <폴더>  # 계약공개현황 검색
+python scripts/ebid_search_contract.py --keyword "VMS" --detail --md --out-dir <폴더>  # 계약 + 건별 상세(담당자·업체·수의근거)
+python scripts/ebid_result.py --notice 202602664 --table                               # 공고 상세·개찰결과
+python scripts/ebid_fetch.py  --notice 202602663 --list                                # 첨부 목록 (파일 안 만듦)
+python scripts/ebid_fetch.py  --notice 202602663 --only 단가                           # 기본 ./ebid-out/ 밑에 받음
+python scripts/ebid_fetch.py  --notice 202605940 202605691 --out-dir ./자료            # 공고 여러 건 배치
 ```
-- **검색은 반드시 `--out` 을 붙인다.** 없으면 결과 전체(34건이면 약 12KB)가 stdout 으로 나와 대화 컨텍스트에 들어오고 파일은 만들어지지 않는다. `--out` 을 주면 반대로 stdout 이 비고 파일만 생긴다. 파일명은 「이름 규칙」.
+- **검색은 반드시 `--out-dir` 을 붙인다.** 없으면 결과 전체(34건이면 약 12KB)가 stdout 으로 나와 대화 컨텍스트에 들어오고 파일은 만들어지지 않는다. 붙이면 반대로 stdout 이 비고, 파일명은 스크립트가 짓고, 완성된 링크가 stderr 에 찍힌다.
 - stdout 은 JSON(`--md` 는 마크다운, `--table` 은 터미널용 한 줄 표). 진단은 stderr.
 - 종료코드: 0 성공 · 1 통신 실패 · 2 인자 오류/공고 미발견 · 3 첨부·상세 **일부** 실패(성공분은 출력됨). 실패 건은 결과 JSON 의 `실패`(첨부) / `상세오류`(계약) 에 **종류 코드**(network·http·server·file)와 메시지로 남는다 — 답변에 실패 건과 종류를 그대로 적는다. `network` 면 사용자 환경(프록시·Codex 샌드박스) 문제라 재시도보다 환경 안내가 먼저.
 
@@ -92,11 +92,11 @@ python scripts/ebid_fetch.py  --notice 202605940 202605691 --out-dir ./자료   
 4. **스크립트는 절대경로로 호출하고 `cd` 로 스킬 폴더에 들어가지 않는다** — 결과가 플러그인 캐시에 쌓이면 업데이트·재설치 때 사라지고 사용자가 자기 프로젝트에서 찾지 못한다.
 - `ebid-out/` 하위 폴더는 워크스페이스에 쓸 때만 만든다. 스크래치패드는 이미 세션별로 격리돼 있어 바로 둔다.
 
-### 이름 규칙 — 만드는 이름에 괄호를 쓰지 않는다
-- 검색 결과 `ebid_<공고|계약>_<키워드>_<YYYYMMDD-HHMM>.md` (예 `ebid_공고_VMS_20260831-1530.md`)
-- 첨부 폴더 `<공고번호>_<공고명>/` (예 `202605940_[긴급]2026년 광주전남본부 CCTV…`) · 첨부 파일은 서버가 준 원본명 그대로(스크립트가 금지문자·100자 정화) · 받은 목록은 `--out-dir` 바로 밑 `_받은목록.md`
-- **접두사에 괄호를 쓰지 않는다.** 링크 URL 은 `](...)` 안에 들어가서 경로의 괄호를 매번 `%28`·`%29` 로 인코딩해야 한다 — 우리가 만드는 이름에 굳이 넣을 이유가 없다(공고명 자체에 든 괄호는 스크립트가 처리한다).
-- 키워드의 공백·특수문자는 `_` 로, 키워드 없이 검색했으면 `전체`. 같은 분에 두 번이면 초까지(`-153042`). **덮어쓰지 않는다** — 같은 키워드라도 기간·유형이 다르면 비교해야 한다. 검색 조건은 이름에 넣지 않는다(md 첫 줄에 이미 있다).
+### 이름 규칙 — 스크립트가 짓는다
+검색은 `--out-dir <폴더>` 만 주면 파일명을 스크립트가 정한다(`ebid_<공고|계약>_<키워드>_<YYYYMMDD-HHMM>.md`).
+직접 이름을 정해야 할 때만 `--out <파일>` 을 쓴다. 첨부는 `--out-dir` 밑에 `<공고번호>_<공고명>/` 폴더와 `_받은목록.md` 가 생기고, 첨부 파일은 서버가 준 원본명 그대로다(금지문자·100자 정화).
+- **우리가 만드는 이름에 괄호를 쓰지 않는다** — 링크 URL 의 괄호는 매번 인코딩해야 해서 읽기 어려워진다(공고명 자체에 든 괄호는 스크립트가 처리한다).
+- **덮어쓰지 않는다** — 같은 키워드라도 기간·유형이 다르면 비교해야 한다.
 
 ## 응답 규칙
 - 발주유형 약어를 쓰지 않는다 → 공사 공고 / 용역 공고 / 물품 공고.

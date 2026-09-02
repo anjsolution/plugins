@@ -293,3 +293,21 @@ def test_file_url_makes_relative_paths_absolute(tmp_path, monkeypatch):
     assert "file:///ebid-out/" not in url          # 상대경로가 그대로 새어나오지 않는다
     assert url.endswith("/ebid-out/x.md")
     assert str(tmp_path).replace("\\", "/").lstrip("/") in url
+
+
+def test_build_result_filename():
+    """이름 규칙을 문서 대신 스크립트가 갖는다 — 문서·코드 양쪽에 두면 한쪽만 고쳐진다."""
+    name = nz.build_result_filename("공고", "VMS")
+    assert name.startswith("ebid_공고_VMS_") and name.endswith(".md")
+    assert "(" not in name and ")" not in name          # 우리가 만드는 이름에 괄호 금지
+    assert nz.build_result_filename("공고", None).startswith("ebid_공고_전체_")
+    assert nz.build_result_filename("계약", "터 널/x*?", "html").endswith(".html")
+    assert "/" not in nz.build_result_filename("계약", "터 널/x*?")   # 경로 문자가 새지 않는다
+
+
+def test_search_clis_import_cleanly():
+    """임포트 누락 같은 사고는 테스트가 스크립트를 실제로 불러봐야 잡힌다."""
+    import importlib, sys
+    sys.path.insert(0, str(SCRIPTS))
+    for mod in ("ebid_search_common", "ebid_search_contract", "ebid_fetch", "ebid_result"):
+        importlib.import_module(mod)

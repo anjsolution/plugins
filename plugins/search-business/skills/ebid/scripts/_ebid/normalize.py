@@ -6,7 +6,9 @@ references/ebid-필드사전.md.
 from __future__ import annotations
 
 import json
+import re
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -418,3 +420,17 @@ def md_file_link(label: Any, path: Any) -> str:
     """
     url = file_url(path).replace("(", "%28").replace(")", "%29").replace(" ", "%20")
     return f"[{_md_escape(label)}]({url})"
+
+
+def build_result_filename(kind: str, keyword: str | None, suffix: str = "md") -> str:
+    """검색 결과 파일명을 만든다 — `ebid_<공고|계약>_<키워드>_<YYYYMMDD-HHMM>.<확장자>`.
+
+    호출자가 이름을 짓지 않게 하려고 스크립트로 옮겼다. 규칙이 문서와 코드 양쪽에 있으면
+    한쪽만 고쳐지는 사고가 난다(링크 문법에서 여러 번 겪었다).
+
+    - 접두사에 괄호를 쓰지 않는다. 링크 URL 의 괄호는 매번 인코딩해야 해서 읽기 어려워진다.
+    - 키워드의 공백·경로 금지문자는 `_` 로, 키워드가 없으면 `전체`.
+    - 같은 분에 두 번 실행하면 이름이 겹치므로 초까지 붙인다(호출부가 충돌 시 재요청).
+    """
+    clean = re.sub(r"[^\w가-힣.-]+", "_", str(keyword or "").strip()).strip("_") or "전체"
+    return f"ebid_{kind}_{clean}_{datetime.now():%Y%m%d-%H%M}.{suffix}"

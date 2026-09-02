@@ -378,7 +378,10 @@ def write_output(text: str, out_path: str | None) -> None:
         p = Path(out_path)
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
+        # 완성된 마크다운 링크를 같이 찍는다 — 호출자가 링크 규칙(절대경로·%20·%28·라벨
+        # 이스케이프)을 알 필요 없이 이 줄을 그대로 답변에 복사하면 된다.
         print(f"[ebid] 저장: {p.resolve()}", file=sys.stderr)
+        print(f"[ebid] 링크: {md_file_link(p.name, p)}", file=sys.stderr)
     else:
         print(text, end="")
 

@@ -192,6 +192,7 @@ def main(argv: list[str] | None = None) -> int:
                              "건너뜀": len(skipped), "실패": failed}},
                      ensure_ascii=False, indent=2))
     print(f"[ebid] 완료: {saved}/{saved + failed} 파일 성공, 받은목록 {manifest}", file=sys.stderr)
+    print(f"[ebid] 링크: {md_file_link(manifest.name, manifest.resolve())}", file=sys.stderr)
     for n in notices:
         for f in n["실패"]:
             print(f"[ebid] 실패: {n['공고번호']} {f['filename']} [{f.get('종류')}]", file=sys.stderr)

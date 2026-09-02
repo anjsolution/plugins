@@ -24,7 +24,8 @@ import json
 import time
 from typing import Any
 
-from _ebid.attachments import MAX_RETRIES, REQUEST_INTERVAL_SECONDS, resolve_notice
+from _ebid.attachments import (MAX_RETRIES, REQUEST_INTERVAL_SECONDS, fetch_attachment_list,
+                               resolve_notice)
 from _ebid.client import EbidClient
 from _ebid.errors import NOTICE_NO_HINT, KoreanArgumentParser, is_notice_no, report_error
 from _ebid.normalize import fmt_dt, normalize_notice
@@ -107,8 +108,21 @@ def main(argv: list[str] | None = None) -> int:
         report_error("입찰결과 조회 실패", exc)
         return 1
 
+    # 첨부 목록도 같은 명령에서 받는다 — 공고 한 건을 볼 때 "무슨 문서가 붙어 있나" 는 거의 항상
+    # 따라오는 질문이라, 사용자가 명령을 두 번 치게 할 이유가 없다. 실패해도 나머지는 낸다.
+    time.sleep(REQUEST_INTERVAL_SECONDS)
+    try:
+        attachments, _src = fetch_attachment_list(client, notice)
+    except Exception as exc:
+        report_error("첨부 목록 조회 실패(나머지는 출력)", exc)
+        attachments = []
+
     detail_data = detail.get("detailData") or {}
-    output: dict[str, Any] = {"공고": summary, "개찰결과": build_result(detail)}
+    output: dict[str, Any] = {
+        "공고": summary,
+        "첨부": [{"파일명": a.get("orgn_file_nm"), "크기": a.get("att_file_siz")} for a in attachments],
+        "개찰결과": build_result(detail),
+    }
     if detail_data.get("prev_noti_no"):
         output["재공고_원공고번호"] = detail_data["prev_noti_no"]
     if detail_data.get("stl_cancel_dt"):
@@ -117,16 +131,30 @@ def main(argv: list[str] | None = None) -> int:
     if args.table:
         s = summary
         print(f"[{s['발주유형']}] {s['공고번호']} {s['공고명']}")
-        print(f"  공고일 {s['공고일']} | 상태 {s['상태']} | {s['계약방법']}"
-              f" | 개찰 {s['개찰일시']}")
+        # 제한유형(HC)·업종(3000) 은 매핑이 없어 코드 그대로일 수밖에 없다. 사람이 못 읽는 값을
+        # 화면에 두면 소음이라 표에서 뺀다 — JSON 에는 그대로 남으니 필요하면 거기서 본다.
+        print(f"  {s['지역']} | 공고일 {s['공고일']} | 상태 {s['상태']} | {s['계약방법']} | 차수 {s.get('차수', '-')}")
+        print(f"  입찰마감 {s.get('입찰마감일시') or '-'} | 개찰 {s['개찰일시'] or '-'} | PQ {s.get('PQ여부') or '-'}")
         r = output["개찰결과"]
         dsg = f"{r['설계금액원']:,}" if r.get("설계금액원") else "-"
         print(f"  설계금액 {dsg}원 | 참가 {r['참가업체수']}개사")
+        att = output["첨부"]
+        if att:
+            total = sum(int(a.get("크기") or 0) for a in att)
+            print(f"  첨부 {len(att)}개 ({total / 1048576:.1f}MB)")
+            for a in att:
+                size = int(a.get("크기") or 0)
+                unit = f"{size / 1048576:.1f}MB" if size >= 1048576 else f"{size / 1024:.0f}KB"
+                print(f"    - {a['파일명']} ({unit})")
+        else:
+            print("  첨부 없음")
         if r.get("낙찰업체"):
             print(f"  낙찰: {r['낙찰업체']} | {r['낙찰금액원']:,}원"
                   f" | 낙찰률 {r.get('낙찰률_퍼센트', '-')}%")
         else:
-            print(f"  낙찰자 없음(미개찰·유찰·취소 가능) — 상태 {s['상태']} 참고")
+            # 상태 라벨과 파생 필드 「입찰단계」로 충분하다. 상태별 설명을 따로 두면
+            # 대부분 동어반복이 되고, 상태 의미가 codes.json·입찰단계에 이어 세 번째로 흩어진다.
+            print(f"  낙찰자 없음 — 상태 {s['상태']} / {s.get('입찰단계', '')}")
         for p in r["참가업체"]:
             amt = f"{p['투찰금액원']:,}" if p.get("투찰금액원") else "-"
             print(f"    - {p['업체명']} | {amt}원 | {p['비고']}")

@@ -104,7 +104,10 @@ def main(argv: list[str] | None = None) -> int:
         rows.extend(normalize_notice(it) for it in items or [])
 
     rows.sort(key=lambda r: r.get("공고일") or "", reverse=True)
-    period = "1년" if not args.date_from and not args.date_to else f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}"
+    # 기간은 기본값이든 지정이든 항상 실제 날짜 범위로 낸다 — "1년" 이라고만 쓰면 언제 기준인지
+    # 알 수 없고, 답변에 날짜를 붙이려면 모델이 따로 계산해야 한다(그만큼 답변이 늦어진다).
+    period = (f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}"
+              f"~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}")
     if args.md:
         write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), args.out)
     elif args.html:

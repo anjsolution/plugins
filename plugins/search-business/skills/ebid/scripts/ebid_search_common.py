@@ -74,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if not args.date_from:
         print(f"[ebid] 기간 미지정 → 기본 최근 1년({from_date}~{to_date}) 적용. "
-              f"답변에 이 범위를 안내할 것 — 이력·과거 사업 질의면 --from 으로 범위를 넓혀 재검색",
+              f"이력·과거 사업 질의면 --from 으로 범위를 넓혀 재검색",
               file=sys.stderr)
 
     if not args.keyword:

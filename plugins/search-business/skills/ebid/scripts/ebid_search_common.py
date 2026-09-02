@@ -27,12 +27,13 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
 
 import json
+from datetime import datetime
 from typing import Any
 
 from _ebid.client import EbidClient
 from _ebid.errors import DATE_HINT, KoreanArgumentParser, report_error
 from _ebid.normalize import (normalize_notice, print_table, render_notice_html,
-                             render_notice_markdown, write_output,
+                             render_notice_markdown, render_notice_markdown_compact, write_output,
                              build_result_filename)
 from _ebid.parallel import map_parallel
 from _ebid.search import NOTICE_CLASS_LABELS, STATUS_FILTER_OVERRIDE, resolve_date_window
@@ -110,13 +111,23 @@ def main(argv: list[str] | None = None) -> int:
     # 기간은 기본값이든 지정이든 항상 실제 날짜 범위로 낸다 — "1년" 이라고만 쓰면 언제 기준인지
     # 알 수 없고, 답변에 날짜를 붙이려면 모델이 따로 계산해야 한다(그만큼 답변이 늦어진다).
     out_path = args.out
+    stamp = f"{datetime.now():%Y%m%d-%H%M}"   # 요약본·상세본이 같은 시각을 공유해 짝이 맞는다
     if not out_path and args.out_dir:
         fmt = "html" if args.html else ("md" if args.md else "json")
-        out_path = str(Path(args.out_dir) / build_result_filename("공고", args.keyword, fmt))
+        out_path = str(Path(args.out_dir) / build_result_filename("공고", args.keyword, fmt, stamp=stamp))
     period = (f"{from_date[:4]}-{from_date[4:6]}-{from_date[6:]}"
               f"~{to_date[:4]}-{to_date[4:6]}-{to_date[6:]}")
     if args.md:
-        write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), out_path)
+        if args.out_dir and not args.out:
+            # 훑어보기용 요약본을 함께 낸다. 같은 rows 를 다시 렌더링할 뿐이라 추가 요청이 없다.
+            brief = Path(args.out_dir) / build_result_filename(
+                "공고", args.keyword, "md", variant="summarize", stamp=stamp)
+            write_output(render_notice_markdown_compact(rows, keyword=args.keyword, period_label=period),
+                         str(brief), link_label="목록")
+            write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period),
+                         out_path, link_label="목록(상세)")
+        else:
+            write_output(render_notice_markdown(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.html:
         write_output(render_notice_html(rows, keyword=args.keyword, period_label=period), out_path)
     elif args.table:

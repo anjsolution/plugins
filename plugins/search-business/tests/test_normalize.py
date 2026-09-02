@@ -102,7 +102,8 @@ def test_render_contract_markdown():
     md = nz.render_contract_markdown([c], keyword="ITS", period_label="1년")
     assert "### [계약] 'ITS' 검색 결과 (1년, 1건)" in md
     assert "| 구분 | 공고번호 | 계약명 | 계약방법 | 사업자번호 | 계약업체 | 총계약금액 | 체결일 |" in md
-    assert "| 용역 | 202603454 | 세종포천선(세종-천안) ITS구축 책임감리용역 | 일반경쟁 | 114-81-64393 | 대영유비텍 주식회사 | 706,520,000 | 2026-05-27 |" in md
+    # 계약명의 검색어는 굵게 표시된다(공고와 같은 규칙)
+    assert "| 용역 | 202603454 | 세종포천선(세종-천안) **ITS**구축 책임감리용역 | 일반경쟁 | 114-81-64393 | 대영유비텍 주식회사 | 706,520,000 | 2026-05-27 |" in md
 
 
 def test_render_markdown_empty():
@@ -311,3 +312,59 @@ def test_search_clis_import_cleanly():
     sys.path.insert(0, str(SCRIPTS))
     for mod in ("ebid_search_common", "ebid_search_contract", "ebid_fetch", "ebid_result"):
         importlib.import_module(mod)
+
+
+def test_render_notice_markdown_compact():
+    """요약본은 공고일·공고번호·공고명 세 열. 유형 제목은 남긴다(열에서 유형을 뺐으므로)."""
+    md = nz.render_notice_markdown_compact([nz.normalize_notice(ITEM)], keyword="ITS", period_label="1년")
+    assert "| 공고일 | 공고번호 | 공고명 |" in md
+    for gone in ("설계금액", "계약방법", "지역", "상태"):
+        assert gone not in md, gone
+    assert "### [용역]" in md                      # 유형 제목은 유지
+    assert "https://ebid.ex.co.kr/default.do" in md  # 딥링크는 남긴다
+
+
+def test_build_result_filename_variant_and_stamp():
+    """요약본·상세본이 같은 시각을 공유해야 짝이 맞는다."""
+    full = nz.build_result_filename("공고", "VMS", stamp="20260902-1653")
+    brief = nz.build_result_filename("공고", "VMS", variant="summarize", stamp="20260902-1653")
+    assert full == "ebid_공고_VMS_20260902-1653.md"
+    assert brief == "ebid_공고_VMS_summarize_20260902-1653.md"
+
+
+def test_highlight_keyword_in_notice_name():
+    """검색어를 굵게. 링크 라벨 안이라 `[a **b** c](url)` 형태가 된다."""
+    row = nz.normalize_notice(ITEM)          # 공고명 = "교통관리시스템 용역"
+    md = nz.render_notice_markdown([row], keyword="교통관리", period_label="1년")
+    assert "**교통관리**시스템" in md
+    assert "](https://ebid" in md                      # 링크는 그대로
+
+    brief = nz.render_notice_markdown_compact([row], keyword="시스템", period_label="1년")
+    assert "**시스템**" in brief                        # 요약본에도 적용
+
+    low = nz.render_notice_markdown([row], keyword="교통관리시스템", period_label="1년")
+    assert "**교통관리시스템**" in low
+
+    none = nz.render_notice_markdown([row], keyword="", period_label="1년")
+    assert "**" not in none.split("|---", 1)[1]        # 키워드 없으면 아무것도 안 굵어진다
+
+    nz.render_notice_markdown([row], keyword="(주)a+b", period_label="1년")  # 정규식 특수문자 안전
+
+
+def test_highlight_applies_to_contract_and_html():
+    """강조는 네 렌더러(공고 md·요약 md·계약 md·HTML) 모두에 걸린다."""
+    notice = nz.normalize_notice(ITEM)
+    contract = nz.normalize_contract(CONTRACT)
+
+    md = nz.render_contract_markdown([contract], keyword="ITS", period_label="1년")
+    assert "**ITS**" in md                                   # 계약명의 'ITS구축'
+
+    html = nz.render_notice_html([notice], keyword="교통관리", period_label="1년")
+    assert "<strong>교통관리</strong>" in html
+    assert "**" not in html                                  # HTML 에는 마크다운 문법을 쓰지 않는다
+
+    chtml = nz.render_contract_html([contract], keyword="ITS", period_label="1년")
+    assert "<strong>ITS</strong>" in chtml
+
+    plain = nz.render_notice_html([notice], keyword="", period_label="1년")
+    assert "<strong>" not in plain                           # 키워드 없으면 강조 없음
